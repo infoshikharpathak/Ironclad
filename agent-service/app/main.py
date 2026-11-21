@@ -155,7 +155,7 @@ def _short(name: str) -> str:
 
 
 @app.get("/traces")
-def get_traces(session_id: str = Query("default")):
+def get_traces(session_id: str = Query(..., description="The browser tab's agent session")):
     """Return the agent's tool-call trace events for a session."""
     traces = []
     for i, c in enumerate(_tool_records(session_id)):
@@ -177,7 +177,7 @@ def get_traces(session_id: str = Query("default")):
 
 
 @app.get("/traces/stats")
-def get_trace_stats(session_id: str = Query("default")):
+def get_trace_stats(session_id: str = Query(..., description="The browser tab's agent session")):
     """Summary stats for a session."""
     calls = _tool_records(session_id)
     latencies = [c["latency_ms"] for c in calls if c["latency_ms"] is not None]
@@ -191,7 +191,7 @@ def get_trace_stats(session_id: str = Query("default")):
 
 
 @app.get("/traces/config")
-def get_trace_config(session_id: str = Query("default")):
+def get_trace_config(session_id: str = Query(..., description="The browser tab's agent session")):
     """The agent's effective policy, and which prerequisites this session has satisfied."""
     platform = _platform()
     policy = platform.describe_agent(AGENT)
@@ -207,8 +207,9 @@ def get_trace_config(session_id: str = Query("default")):
     }
 
 
-@app.post("/traces/export")
-def export_traces(session_id: str = Query("default")):
+# GET too: the UI's export button is a plain link.
+@app.api_route("/traces/export", methods=["GET", "POST"])
+def export_traces(session_id: str = Query(..., description="The browser tab's agent session")):
     """Export a session's trace as downloadable JSON."""
     payload = {
         "session_id": session_id,
