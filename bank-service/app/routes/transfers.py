@@ -118,7 +118,6 @@ async def initiate_transfer(body: TransferInitiateRequest):
                 amount=float(existing["amount"]),
                 from_account=existing["from_account"],
                 to_account=existing["to_account"],
-                otp_code=None,  # never leak a second copy
                 expires_at=existing["otp_expires_at"],
                 idempotent_replay=True,
             )
@@ -150,6 +149,9 @@ async def initiate_transfer(body: TransferInitiateRequest):
 
     # Push OTP via WebSocket so any connected browser shows the modal.
     # Include full transfer details so the user can review before entering OTP.
+    # This (and GET /transfers/pending) is the ONLY way the code leaves the
+    # bank: the /initiate response below never contains it, because the
+    # caller may be an AI agent.
     to_owner = to_row.get("owner_name") or to_row["name"]
     await manager.send_to_user(
         body.user_id,
@@ -176,7 +178,6 @@ async def initiate_transfer(body: TransferInitiateRequest):
         amount=float(body.amount),
         from_account=body.from_account,
         to_account=body.to_account,
-        otp_code=otp_code,
         expires_at=expires_at,
     )
 

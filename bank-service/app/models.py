@@ -74,9 +74,10 @@ class TransferInitiateResponse(BaseModel):
     amount: float
     from_account: str
     to_account: str
-    # Demo only: the plaintext OTP. None when an idempotent replay returns an existing
-    # transfer, because only the bcrypt hash is stored.
-    otp_code: str | None
+    # Deliberately no otp_code. Whoever calls /initiate (possibly an AI agent)
+    # must never receive the code: the user gets it only on the dashboard
+    # (the WebSocket otp_required push, or GET /transfers/pending), so only
+    # the person can confirm the transfer.
     expires_at: datetime | None
     idempotent_replay: bool = False
 

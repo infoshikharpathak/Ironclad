@@ -36,7 +36,7 @@ export interface TransferInitiateResponse {
   amount: number;
   from_account: string;
   to_account: string;
-  otp_code: string | null;
+  // No otp_code: the code reaches the user only via the dashboard.
   expires_at: string | null;
   idempotent_replay?: boolean;
 }
