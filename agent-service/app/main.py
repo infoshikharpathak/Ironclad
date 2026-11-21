@@ -47,7 +47,11 @@ logger = logging.getLogger("ironclad-agent")
 
 # ── Config ───────────────────────────────────────────────────────────────────
 
-ANVIL_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "../../anvil-ironclad.yaml")
+# docker-compose sets ANVIL_CONFIG_PATH (the yaml is mounted at /app/anvil-ironclad.yaml).
+# Local dev falls back to the repo-root file next to agent-service/.
+ANVIL_CONFIG_PATH = os.environ.get("ANVIL_CONFIG_PATH") or os.path.join(
+    os.path.dirname(__file__), "../../anvil-ironclad.yaml"
+)
 ANVIL_POLICY = "ironclad-banking"
 ANVIL_APP = "ironclad"
 ANVIL_AGENT_ID = "ironclad.banking_agent"
