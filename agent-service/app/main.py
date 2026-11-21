@@ -56,10 +56,30 @@ def prepare_tool_call(ctx: Any, tool: str, params: dict[str, Any]) -> dict[str, 
 
 
 def build_platform(**platform_kwargs: Any) -> Platform:
-    """*platform_kwargs* go to Platform (tests pass stub LLM clients and an
-    HTTP transport for the bank)."""
+    """The agent's platform, from the anvil-forge control plane or the local YAML.
+
+    Remote mode, when ANVIL_FORGE_URL and ANVIL_FORGE_KEY are both set: the
+    bundle (tools, agent, prompt version, policy) comes from the service and
+    is re-checked every ANVIL_FORGE_REFRESH_SECONDS (default 30), so prompt
+    edits and rollbacks there apply without a restart. Otherwise the local
+    anvil-ironclad.yaml is used, as before.
+
+    *platform_kwargs* go to Platform (tests pass stub LLM clients, an HTTP
+    transport for the bank, and in remote mode a service transport).
+    """
+    url, key = os.getenv("ANVIL_FORGE_URL"), os.getenv("ANVIL_FORGE_KEY")
+    if url and key:
+        platform = Platform.from_service(
+            url, key, prepare_tool_call=prepare_tool_call,
+            refresh_interval=float(os.getenv("ANVIL_FORGE_REFRESH_SECONDS", "30")),
+            **platform_kwargs,
+        )
+        if platform.app != APP:
+            raise RuntimeError(f"ANVIL_FORGE_KEY belongs to app {platform.app!r}, not {APP!r}.")
+        logger.info("anvil-forge remote mode: %s, revision %s", url, platform.bundle_revision)
+        return platform
     raw = yaml.safe_load(open(CONFIG_PATH))
-    if os.getenv("OPENAI_MODEL"):  # same override the service always had
+    if os.getenv("OPENAI_MODEL"):  # local mode only; in remote mode the service decides the model
         raw["agents"][AGENT_ID]["model"] = os.environ["OPENAI_MODEL"]
     return Platform(load_config(raw), app=APP, prepare_tool_call=prepare_tool_call, **platform_kwargs)
 
