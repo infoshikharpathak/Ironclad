@@ -1,4 +1,4 @@
-# Irodclad Bank
+# Ironclad Bank
 
 Fictional bank application — PostgreSQL + FastAPI + React, all running locally via Docker Compose.
 
