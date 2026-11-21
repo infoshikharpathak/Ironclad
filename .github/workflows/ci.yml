@@ -1,0 +1,52 @@
+name: CI
+
+# Every model call and bank endpoint is stubbed, so no secrets are needed.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  agent-service:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # 3.12 matches the Docker image; 3.13 is what local dev runs.
+        python-version: ["3.12", "3.13"]
+    defaults:
+      run:
+        working-directory: agent-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          # The bastion pin (a full commit SHA) only changes when
+          # requirements.txt does, so its git build is cached with it.
+          cache: pip
+          cache-dependency-path: agent-service/requirements*.txt
+      - name: Install
+        run: pip install -r requirements-dev.txt
+      - name: Test
+        env:
+          OPENAI_API_KEY: dummy-key-for-ci
+        run: pytest -q
+
+  bank-service:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: bank-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"  # matches bank-service's Docker image
+          cache: pip
+          cache-dependency-path: bank-service/requirements.txt
+      - name: Install
+        run: pip install -r requirements.txt pytest httpx
+      - name: Test
+        run: pytest -q tests
