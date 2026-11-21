@@ -52,14 +52,25 @@ export interface TransferConfirmResponse {
 export interface OTPEvent {
   transfer_id: string;
   amount: number;
+  from_account: string;
+  to_account: string;
   from_name: string;
   to_name: string;
+  description: string;
+  initiated_by: string;
   otp_code: string;
 }
 
 export interface WSEvent {
   type: 'otp_required' | 'transfer_confirmed' | 'transfer_cancelled' | 'balance_updated';
   data: any;
+}
+
+export interface PublicAccount {
+  account_number: string;
+  owner_name: string;
+  account_type: 'checking' | 'savings';
+  currency: string;
 }
 
 export interface ApiError {
