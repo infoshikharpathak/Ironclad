@@ -138,6 +138,9 @@ apps:
         trust: untrusted
         timeout: 10
         injection_scanning: true
+        # Defense in depth: bank-service no longer returns the OTP, but if any
+        # version ever does, Anvil strips it before the agent or a trace sees it.
+        redact_fields: [otp_code]
         parameters:
           type: object
           properties:

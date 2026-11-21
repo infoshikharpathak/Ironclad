@@ -185,3 +185,25 @@ async def test_trace_endpoints_keep_their_shapes_and_are_session_scoped(service)
 async def test_health(service):
     client, _, _ = service
     assert (await client.get("/health")).json() == {"status": "ok", "anvil_session": None}
+
+
+async def test_otp_never_reaches_the_agent_even_if_the_bank_leaks_it(service):
+    """Defense in depth: bank-service no longer returns otp_code, but if a
+    bank version did, Anvil's redact_fields strips it before the model, the
+    chat reply or any trace sees it."""
+    import json as _json
+
+    client, llm, bank = service
+    bank.leak_otp = True
+    llm.plans.update({S1_LOOKUP: LOOKUP_PLAN, S1_SEND: SEND_PLAN})
+    await chat(client, S1_LOOKUP, "leak")
+    body = await chat(client, S1_SEND, "leak")
+    (transfer,) = body["tool_calls"]
+    assert transfer["blocked"] is False and transfer["result"]["status"] == "pending_otp"
+    assert "otp_code" not in transfer["result"]
+    assert "482913" not in _json.dumps(body)
+    assert "482913" not in _json.dumps(llm.requests)  # never in the model's context
+    export = (await client.get("/traces/export", params={"session_id": "leak"})).text
+    assert "482913" not in export
+    from anvil_forge import LocalSink
+    assert "482913" not in _json.dumps(LocalSink().read())

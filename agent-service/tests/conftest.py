@@ -80,6 +80,7 @@ class StubBank:
 
     def __init__(self):
         self.requests: list[httpx.Request] = []
+        self.leak_otp = False  # behave like an old bank that returned the code
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -94,7 +95,10 @@ class StubBank:
                                              "account_type": "checking", "currency": "USD"})
         if path == "/transfers/initiate":
             body = json.loads(request.content)
-            return httpx.Response(200, json={"transfer_id": "tr-1", "status": "pending_otp", "amount": body["amount"]})
+            out = {"transfer_id": "tr-1", "status": "pending_otp", "amount": body["amount"]}
+            if self.leak_otp:
+                out["otp_code"] = "482913"
+            return httpx.Response(200, json=out)
         return httpx.Response(404, json={"detail": f"stub bank has no {path}"})
 
     def paths(self):
