@@ -55,11 +55,13 @@ def prepare_tool_call(ctx: Any, tool: str, params: dict[str, Any]) -> dict[str, 
     return params
 
 
-def build_platform() -> Platform:
+def build_platform(**platform_kwargs: Any) -> Platform:
+    """*platform_kwargs* go to Platform (tests pass stub LLM clients and an
+    HTTP transport for the bank)."""
     raw = yaml.safe_load(open(CONFIG_PATH))
     if os.getenv("OPENAI_MODEL"):  # same override the service always had
         raw["agents"][AGENT_ID]["model"] = os.environ["OPENAI_MODEL"]
-    return Platform(load_config(raw), app=APP, prepare_tool_call=prepare_tool_call)
+    return Platform(load_config(raw), app=APP, prepare_tool_call=prepare_tool_call, **platform_kwargs)
 
 
 @asynccontextmanager
