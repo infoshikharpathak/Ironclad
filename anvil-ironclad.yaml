@@ -1,6 +1,9 @@
-# Anvil config for Ironclad. All tools and agents belong to the `ironclad`
-# app, so tool IDs are "ironclad.<tool>" and agent IDs "ironclad.<agent>".
-# Inside an ironclad agent, bare tool names resolve to ironclad's tools.
+# anvil-forge config for Ironclad: the ironclad app, its tools, and the
+# banking agent. anvil-forge compiles the agent's tools, sequences,
+# strictness and trust overrides into the Anvil policy that governs every
+# call, so that policy is the single source of truth for what the agent may do.
+# Tool IDs are "ironclad.<tool>", agent IDs "ironclad.<agent>"; inside an
+# ironclad agent, bare tool names resolve to ironclad's tools.
 apps:
   ironclad:
     base_url: "http://localhost:8001"
@@ -180,47 +183,61 @@ apps:
         response_schema:
           required_fields: ["status", "accounts"]
 
-# ── Policies ─────────────────────────────────────────────────────
-policies:
-  ironclad-banking:
+# ── Agents ───────────────────────────────────────────────────────
+agents:
+  ironclad.banking_agent:
     description: "Governance policy for AI agents operating on Ironclad Bank. Agents must look up accounts before transferring, and can never confirm OTPs."
-    agents:
-      ironclad.banking_agent:
-        allowed_tools:
-          - get_accounts
-          - get_account
-          - get_transactions
-          - lookup_account
-          - list_directory
-          - get_transfer_status
-          - initiate_transfer
-        sequences:
-          # Must look up the source account before initiating a transfer
-          - before: initiate_transfer
-            requires: [get_accounts]
-            match_fields: [user_id]
-          # Must look up the recipient before sending to an external account
-          - before: initiate_transfer
-            requires: [lookup_account]
-            match_fields: []
-        strictness: strict
-        trust_overrides:
-          # Read tools are trusted, but transfers are untrusted (default)
-          get_accounts: trusted
-          get_account: trusted
-          get_transactions: trusted
-          lookup_account: trusted
-          list_directory: trusted
+    prompt_version: v1
+    backend: openai
+    model: gpt-4o-mini   # agent-service's OPENAI_MODEL env var overrides this
+    instructions: |
+      You are the Ironclad Bank AI Assistant. You help the user manage their bank accounts.
 
-      ironclad.admin_agent:
-        allowed_tools:
-          - get_accounts
-          - get_account
-          - get_transactions
-          - list_directory
-          - reset_accounts
-        sequences: []
-        strictness: loose
+      You can:
+      - Check account balances (get_accounts)
+      - View transaction history (get_transactions)
+      - Look up people to send money to (list_directory, lookup_account)
+      - Initiate transfers (initiate_transfer) — these require OTP confirmation from the user
+      - Check transfer status (get_transfer_status)
+
+      Important rules:
+      - The user is "demo_user". Always use this user_id.
+      - Before initiating a transfer, ALWAYS call get_accounts first to see the user's accounts, then lookup_account to verify the recipient. Anvil governance enforces this — skipping these steps will block the transfer.
+      - You can NEVER confirm an OTP. After initiating a transfer, tell the user to check the OTP modal in the bank dashboard to confirm it.
+      - When initiating transfers, always set initiated_by to "agent".
+      - Be concise and helpful. Format currency amounts properly.
+      - If a tool call is blocked by governance, explain what happened and what steps are needed.
+    tools:
+      - get_accounts
+      - get_account
+      - get_transactions
+      - lookup_account
+      - list_directory
+      - get_transfer_status
+      - initiate_transfer
+    sequences:
+      # Must look up the source account before initiating a transfer
+      - before: initiate_transfer
+        requires: [get_accounts]
+        match_fields: [user_id]
+      # Must look up the recipient before sending to an external account
+      - before: initiate_transfer
+        requires: [lookup_account]
+        match_fields: []
+    strictness: strict
+    trust_overrides:
+      # Read tools are trusted, but transfers are untrusted (default)
+      get_accounts: trusted
+      get_account: trusted
+      get_transactions: trusted
+      lookup_account: trusted
+      list_directory: trusted
+
+# Injection classifier for Anvil's scans: same provider and key as the agent.
+classifier:
+  enabled: true
+  provider: openai
+  model: gpt-4o-mini
 
 settings:
   injection_scanning: true
