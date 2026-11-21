@@ -40,6 +40,9 @@ services:
     environment:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       ANVIL_CONFIG_PATH: /app/anvil-ironclad.yaml
+      # The YAML's base_url is localhost:8001, which inside this container is
+      # the container itself. Point the agent's tools at the bank service.
+      IRONCLAD_BASE_URL: http://bank-service:8001
     volumes:
       - ./anvil-ironclad.yaml:/app/anvil-ironclad.yaml:ro
     ports:

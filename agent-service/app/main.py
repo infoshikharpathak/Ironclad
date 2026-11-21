@@ -62,13 +62,18 @@ def build_platform(**platform_kwargs: Any) -> Platform:
     bundle (tools, agent, prompt version, policy) comes from the service and
     is re-checked every BASTION_REFRESH_SECONDS (default 30), so prompt
     edits and rollbacks there apply without a restart. Otherwise the local
-    anvil-ironclad.yaml is used, as before.
+    anvil-ironclad.yaml is used, as before, with the bank at
+    IRONCLAD_BASE_URL if that's set (containers can't reach localhost:8001).
 
     *platform_kwargs* go to Platform (tests pass stub LLM clients, an HTTP
     transport for the bank, and in remote mode a service transport).
     """
     url, key = os.getenv("BASTION_URL"), os.getenv("BASTION_KEY")
+    bank_url = os.getenv("IRONCLAD_BASE_URL")
     if url and key:
+        if bank_url:
+            logger.warning("IRONCLAD_BASE_URL is ignored in remote mode: set the ironclad app's "
+                           "base_url on the bastion service instead.")
         platform = Platform.from_service(
             url, key, prepare_tool_call=prepare_tool_call,
             refresh_interval=float(os.getenv("BASTION_REFRESH_SECONDS", "30")),
@@ -79,6 +84,8 @@ def build_platform(**platform_kwargs: Any) -> Platform:
         logger.info("bastion remote mode: %s, revision %s", url, platform.bundle_revision)
         return platform
     raw = yaml.safe_load(open(CONFIG_PATH))
+    if bank_url:  # e.g. http://bank-service:8001 in docker-compose; the YAML says localhost
+        raw["apps"][APP]["base_url"] = bank_url.rstrip("/")
     if os.getenv("OPENAI_MODEL"):  # local mode only; in remote mode the service decides the model
         raw["agents"][AGENT_ID]["model"] = os.environ["OPENAI_MODEL"]
     return Platform(load_config(raw), app=APP, prepare_tool_call=prepare_tool_call, **platform_kwargs)

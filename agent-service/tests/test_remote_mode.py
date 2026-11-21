@@ -43,7 +43,8 @@ async def remote(monkeypatch, tmp_path):
     monkeypatch.setenv("BASTION_REFRESH_SECONDS", "0")  # tests refresh explicitly
     forge, llm, bank = FakeBastion(CONFIG), StubLLM({}), StubBank()
     platform = main.build_platform(openai_client=llm, http_transport=httpx.MockTransport(bank),
-                                   service_transport=httpx.MockTransport(forge), cache_dir=tmp_path)
+                                   service_transport=httpx.MockTransport(forge), cache_dir=tmp_path,
+                                   dashboard=False)  # FakeBastion has no /v1/traces
     await platform.start()
     main.app.state.platform = platform
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url="http://agent") as client:
@@ -106,3 +107,37 @@ def test_without_the_env_vars_it_is_local_mode(monkeypatch):
     monkeypatch.delenv("BASTION_KEY", raising=False)
     platform = main.build_platform()
     assert platform.bundle_revision is None and platform.app == "ironclad"
+
+
+async def test_ironclad_base_url_points_tools_at_the_bank(monkeypatch):
+    """docker-compose sets IRONCLAD_BASE_URL=http://bank-service:8001."""
+    import httpx
+
+    import app.main as main
+
+    from .conftest import StubBank, StubLLM
+
+    monkeypatch.delenv("BASTION_URL", raising=False)
+    monkeypatch.delenv("BASTION_KEY", raising=False)
+    monkeypatch.setenv("IRONCLAD_BASE_URL", "http://bank-service:8001/")
+    llm = StubLLM({"Balances?": [{"tool": "get_accounts", "args": {}}, {"text": "You have $2,400."}]})
+    bank = StubBank()
+    platform = main.build_platform(openai_client=llm, http_transport=httpx.MockTransport(bank))
+    await platform.run_agent("banking_agent", "Balances?")
+    await platform.close()
+    (req,) = bank.requests
+    assert (req.url.host, req.url.port, req.url.path) == ("bank-service", 8001, "/accounts")
+
+
+def test_ironclad_base_url_is_ignored_in_remote_mode_with_a_warning(monkeypatch, tmp_path, caplog):
+    import app.main as main
+
+    monkeypatch.setenv("IRONCLAD_BASE_URL", "http://bank-service:8001")
+    monkeypatch.setenv("BASTION_URL", "http://bastion.test")
+    monkeypatch.setenv("BASTION_KEY", KEY)
+    service = FakeBastion(CONFIG)
+    with caplog.at_level("WARNING"):
+        platform = main.build_platform(service_transport=httpx.MockTransport(service), cache_dir=tmp_path,
+                                       dashboard=False)
+    assert "IRONCLAD_BASE_URL is ignored in remote mode" in caplog.text
+    assert platform.config.platform.apps["ironclad"]["base_url"] != "http://bank-service:8001"
