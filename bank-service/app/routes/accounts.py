@@ -5,6 +5,8 @@ from ..errors import BankError, account_not_found, forbidden
 from ..models import (
     Account,
     AccountsResponse,
+    DepositRequest,
+    ResetRequest,
     ResetResponse,
     TransactionsResponse,
     account_from_row,
@@ -68,8 +70,35 @@ async def list_transactions(
     )
 
 
+@router.post("/{account_id}/deposit", response_model=Account)
+async def deposit(account_id: str, body: DepositRequest):
+    """Add funds to an account the user owns. No OTP — this is a demo convenience
+    so users can top up their accounts without an external funding source."""
+    if body.amount <= 0:
+        raise BankError(422, "INVALID_TRANSFER", "Deposit amount must be positive")
+
+    pool = get_pool()
+    row = await pool.fetchrow("SELECT * FROM accounts WHERE id = $1", account_id)
+    if row is None:
+        raise account_not_found(account_id)
+    if row["user_id"] != body.user_id:
+        raise forbidden("You do not own this account")
+
+    await pool.execute(
+        "UPDATE accounts SET balance = balance + $1 WHERE id = $2",
+        body.amount,
+        account_id,
+    )
+    updated = await pool.fetchrow("SELECT * FROM accounts WHERE id = $1", account_id)
+    return account_from_row(updated)
+
+
 @router.post("/reset", response_model=ResetResponse)
-async def reset_accounts(user_id: str = Query(min_length=1)):
+async def reset_accounts(body: ResetRequest | None = None, user_id: str | None = Query(default=None, min_length=1)):
+    # Accept user_id from JSON body (agent calls) or query param (browser calls)
+    user_id = (body.user_id if body else None) or user_id
+    if not user_id:
+        raise BankError(422, "INVALID_TRANSFER", "user_id is required")
     pool = get_pool()
     async with pool.acquire() as conn:
         async with conn.transaction():

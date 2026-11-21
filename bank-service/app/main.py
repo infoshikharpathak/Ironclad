@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from . import config
 from .db import init_pool, close_pool
 from .errors import BankError
-from .routes import health, accounts, transfers
+from .routes import health, accounts, transfers, directory
 from .ws.notifications import router as ws_router
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(name)s  %(message)s")
@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI):
     await close_pool()
 
 
-app = FastAPI(title="Irodclad Bank Service", lifespan=lifespan)
+app = FastAPI(title="Ironclad Bank Service", lifespan=lifespan)
 
 # CORS
 app.add_middleware(
@@ -50,4 +50,5 @@ async def bank_error_handler(_request: Request, exc: BankError):
 app.include_router(health.router)
 app.include_router(accounts.router)
 app.include_router(transfers.router)
+app.include_router(directory.router)
 app.include_router(ws_router)

@@ -7,9 +7,14 @@ CREATE TABLE accounts (
     balance         NUMERIC(12,2) NOT NULL DEFAULT 0 CHECK (balance >= 0),
     currency        TEXT NOT NULL DEFAULT 'USD',
     created_at      TIMESTAMPTZ DEFAULT now(),
-    is_demo         BOOLEAN DEFAULT true
+    is_demo         BOOLEAN DEFAULT true,
+    -- Public-facing display name (owner's name shown in directory / lookup)
+    owner_name      TEXT,
+    -- Whether this account appears in the public directory
+    is_public       BOOLEAN DEFAULT false
 );
 CREATE INDEX idx_accounts_user ON accounts(user_id);
+CREATE INDEX idx_accounts_public ON accounts(is_public) WHERE is_public = true;
 
 -- Transactions (transfers between accounts)
 CREATE TABLE transactions (
@@ -45,3 +50,11 @@ $$ LANGUAGE plpgsql;
 
 -- Seed a default demo user
 SELECT seed_demo_user('demo_user');
+
+-- Public person accounts (transfer targets with visible account numbers)
+INSERT INTO accounts (id, user_id, name, account_type, balance, owner_name, is_public)
+VALUES
+    ('ACC-10042-CHK', 'alice',  'Checking', 'checking',  8200.00, 'Alice Johnson', true),
+    ('ACC-10043-CHK', 'bob',    'Checking', 'checking',  3750.00, 'Bob Smith',     true),
+    ('ACC-10044-SAV', 'carol',  'Savings',  'savings',  15000.00, 'Carol Davis',   true)
+ON CONFLICT (id) DO NOTHING;

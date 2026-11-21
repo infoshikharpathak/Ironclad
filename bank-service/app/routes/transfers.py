@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Query
+from pydantic import BaseModel
 
 from ..db import get_pool
 from ..errors import BankError, account_not_found, forbidden, transfer_not_found, invalid_transfer
@@ -22,6 +23,56 @@ from ..ws.notifications import manager
 from .. import config
 
 router = APIRouter(prefix="/transfers", tags=["transfers"])
+
+
+@router.get("/pending")
+async def list_pending_transfers(user_id: str = Query(min_length=1)):
+    """Return all pending_otp transfers for the user, with fresh OTP codes."""
+    pool = get_pool()
+    rows = await pool.fetch(
+        """
+        SELECT t.*, a_from.name AS from_name,
+               COALESCE(a_to.owner_name, a_to.name) AS to_name
+        FROM transactions t
+        JOIN accounts a_from ON a_from.id = t.from_account
+        JOIN accounts a_to   ON a_to.id   = t.to_account
+        WHERE t.user_id = $1 AND t.status = 'pending_otp'
+        ORDER BY t.created_at DESC
+        """,
+        user_id,
+    )
+
+    pending = []
+    now = datetime.now(timezone.utc)
+    for row in rows:
+        if row["otp_expires_at"] and now > row["otp_expires_at"]:
+            await pool.execute(
+                "UPDATE transactions SET status = 'cancelled' WHERE id = $1", row["id"]
+            )
+            continue
+
+        otp_code = otp_svc.generate_otp()
+        otp_hash = await asyncio.to_thread(otp_svc.hash_otp, otp_code)
+        await pool.execute(
+            "UPDATE transactions SET otp_hash = $1, otp_attempts = 0 WHERE id = $2",
+            otp_hash, row["id"],
+        )
+
+        pending.append({
+            "transfer_id": row["id"],
+            "amount": float(row["amount"]),
+            "from_account": row["from_account"],
+            "to_account": row["to_account"],
+            "from_name": row["from_name"],
+            "to_name": row["to_name"],
+            "description": row["description"] or "",
+            "initiated_by": row["initiated_by"],
+            "otp_code": otp_code,
+            "expires_at": row["otp_expires_at"].isoformat() if row["otp_expires_at"] else None,
+            "created_at": row["created_at"].isoformat(),
+        })
+
+    return {"transfers": pending}
 
 
 @router.post("/initiate", response_model=TransferInitiateResponse)
@@ -98,6 +149,8 @@ async def initiate_transfer(body: TransferInitiateRequest):
     )
 
     # Push OTP via WebSocket so any connected browser shows the modal.
+    # Include full transfer details so the user can review before entering OTP.
+    to_owner = to_row.get("owner_name") or to_row["name"]
     await manager.send_to_user(
         body.user_id,
         {
@@ -105,8 +158,12 @@ async def initiate_transfer(body: TransferInitiateRequest):
             "data": {
                 "transfer_id": transfer_id,
                 "amount": float(body.amount),
+                "from_account": body.from_account,
+                "to_account": body.to_account,
                 "from_name": from_row["name"],
-                "to_name": to_row["name"],
+                "to_name": to_owner,
+                "description": body.description,
+                "initiated_by": body.initiated_by,
                 "otp_code": otp_code,
             },
         },
@@ -234,6 +291,32 @@ async def confirm_transfer(transfer_id: str, body: TransferConfirmRequest):
         transaction=transaction_from_row(updated_txn),
         new_balances=new_balances,
     )
+
+
+class CancelRequest(BaseModel):
+    user_id: str
+
+
+@router.post("/{transfer_id}/cancel")
+async def cancel_transfer(transfer_id: str, body: CancelRequest):
+    """Cancel a pending transfer (user declined)."""
+    pool = get_pool()
+    row = await pool.fetchrow("SELECT * FROM transactions WHERE id = $1", transfer_id)
+    if row is None:
+        raise transfer_not_found(transfer_id)
+    if row["user_id"] != body.user_id:
+        raise forbidden("You do not own this transfer")
+    if row["status"] != "pending_otp":
+        raise BankError(422, "TRANSFER_NOT_PENDING", f"Transfer is {row['status']}, not pending_otp")
+
+    await pool.execute(
+        "UPDATE transactions SET status = 'cancelled' WHERE id = $1", transfer_id
+    )
+    await manager.send_to_user(
+        body.user_id,
+        {"type": "transfer_cancelled", "data": {"transfer_id": transfer_id, "reason": "Declined by user"}},
+    )
+    return {"transfer_id": transfer_id, "status": "cancelled", "message": "Transfer cancelled."}
 
 
 @router.get("/{transfer_id}/status")

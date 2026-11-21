@@ -23,6 +23,15 @@ class TransferConfirmRequest(BaseModel):
     otp_code: str = Field(min_length=1, max_length=16)
 
 
+class ResetRequest(BaseModel):
+    user_id: str = Field(min_length=1)
+
+
+class DepositRequest(BaseModel):
+    user_id: str = Field(min_length=1)
+    amount: Decimal
+
+
 # ---------- Responses ----------
 
 
@@ -83,6 +92,30 @@ class TransferConfirmResponse(BaseModel):
 class ResetResponse(BaseModel):
     status: str
     accounts: list[Account]
+
+
+# --- Directory / Lookup (public) ---
+
+
+class PublicAccount(BaseModel):
+    """What anyone can see about an account — no balance exposed."""
+    account_number: str
+    owner_name: str
+    account_type: str
+    currency: str
+
+
+class DirectoryResponse(BaseModel):
+    accounts: list[PublicAccount]
+
+
+def public_account_from_row(row) -> PublicAccount:
+    return PublicAccount(
+        account_number=row["id"],
+        owner_name=row["owner_name"] or row["name"],
+        account_type=row["account_type"],
+        currency=row["currency"],
+    )
 
 
 def account_from_row(row) -> Account:
