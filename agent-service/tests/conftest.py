@@ -81,6 +81,7 @@ class StubBank:
     def __init__(self):
         self.requests: list[httpx.Request] = []
         self.leak_otp = False  # behave like an old bank that returned the code
+        self.memo = "Lunch"     # memo on the incoming payment get_transactions returns
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -88,6 +89,11 @@ class StubBank:
         if path == "/accounts":
             return httpx.Response(200, json={"accounts": [
                 {"id": "acc-chk", "name": "Everyday Checking", "account_type": "checking", "balance": 2400.0, "currency": "USD"},
+            ]})
+        if path.endswith("/transactions"):
+            return httpx.Response(200, json={"limit": 20, "offset": 0, "transactions": [
+                {"id": "tx-1", "from_account": "ACC-10043-CHK", "to_account": "acc-chk", "amount": 1.0,
+                 "status": "confirmed", "description": self.memo, "initiated_by": "user"},
             ]})
         if path.startswith("/directory/lookup/"):
             number = path.rsplit("/", 1)[1]

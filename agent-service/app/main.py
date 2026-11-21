@@ -183,6 +183,9 @@ def _short(name: str) -> str:
     return name.split(".", 1)[1] if "." in name else name
 
 
+_BLOCKED_RESULTS = ("blocked", "response_withheld")
+
+
 @app.get("/traces")
 def get_traces(session_id: str = Query(..., description="The browser tab's agent session")):
     """Return the agent's tool-call trace events for a session."""
@@ -195,7 +198,9 @@ def get_traces(session_id: str = Query(..., description="The browser tab's agent
             "agent_id": _short(c["agent"]),
             "tool": _short(c["tool"]),
             "parameters": c["params"],
-            "decision": "blocked" if result == "blocked" else "allowed",
+            # A withheld response ran at the bank, but the agent never saw it
+            # (e.g. an injection in a memo): for the user that's a block.
+            "decision": "blocked" if result in _BLOCKED_RESULTS else "allowed",
             "result": result,
             "reason": c["correction_message"] or ("Allowed by policy" if result == "success" else "Response withheld"),
             "violation": c["violation"],
@@ -212,8 +217,8 @@ def get_trace_stats(session_id: str = Query(..., description="The browser tab's 
     latencies = [c["latency_ms"] for c in calls if c["latency_ms"] is not None]
     return {
         "total": len(calls),
-        "allowed": sum(1 for c in calls if c["result"] in ("success", "response_withheld")),
-        "blocked": sum(1 for c in calls if c["result"] == "blocked"),
+        "allowed": sum(1 for c in calls if c["result"] not in _BLOCKED_RESULTS),
+        "blocked": sum(1 for c in calls if c["result"] in _BLOCKED_RESULTS),
         "avg_ms": round(sum(latencies) / len(latencies), 1) if latencies else 0,
         "tools_used": list(dict.fromkeys(_short(c["tool"]) for c in calls)),
     }

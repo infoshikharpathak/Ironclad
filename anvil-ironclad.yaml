@@ -54,13 +54,16 @@ apps:
         response_schema:
           required_fields: ["id", "name", "account_type", "balance", "currency"]
 
+      # Read-only, but NOT trusted: transaction memos are written by whoever
+      # sent the money, so the response is scanned for injected instructions
+      # before the agent sees it.
       get_transactions:
         path: "/accounts/{account_id}/transactions"
         method: GET
         description: "List recent transactions for an account. Returns newest first."
-        trust: trusted
+        trust: untrusted
         timeout: 5
-        injection_scanning: false
+        injection_scanning: true
         parameters:
           type: object
           properties:
@@ -229,10 +232,10 @@ agents:
         match_fields: []
     strictness: strict
     trust_overrides:
-      # Read tools are trusted, but transfers are untrusted (default)
+      # Read tools are trusted, except get_transactions (third-party memos);
+      # transfers are untrusted (default)
       get_accounts: trusted
       get_account: trusted
-      get_transactions: trusted
       lookup_account: trusted
       list_directory: trusted
 

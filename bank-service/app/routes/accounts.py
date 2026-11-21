@@ -49,12 +49,15 @@ async def list_transactions(
     offset: int = Query(default=0, ge=0),
 ):
     await _ensure_ownership(account_id, user_id)
+    # The user's own transfers in or out of this account, plus money other
+    # people sent to it once it went through. (Someone else's pending or
+    # cancelled transfer is theirs, not this user's.)
     rows = await get_pool().fetch(
         """
         SELECT *
         FROM transactions
-        WHERE (from_account = $1 OR to_account = $1)
-          AND user_id = $2
+        WHERE (from_account = $1 AND user_id = $2)
+           OR (to_account = $1 AND (user_id = $2 OR status = 'confirmed'))
         ORDER BY created_at DESC
         LIMIT $3 OFFSET $4
         """,
