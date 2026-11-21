@@ -14,6 +14,10 @@ export default defineConfig({
         target: 'ws://localhost:8001',
         ws: true,
       },
+      '/agent': {
+        target: 'http://localhost:8002',
+        rewrite: (path) => path.replace(/^\/agent/, ''),
+      },
     },
   },
 });

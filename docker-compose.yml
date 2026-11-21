@@ -35,5 +35,17 @@ services:
     depends_on:
       - bank-service
 
+  agent-service:
+    build: ./agent-service
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANVIL_CONFIG_PATH: /app/anvil-ironclad.yaml
+    volumes:
+      - ./anvil-ironclad.yaml:/app/anvil-ironclad.yaml:ro
+    ports:
+      - "8002:8002"
+    depends_on:
+      - bank-service
+
 volumes:
   pgdata:
