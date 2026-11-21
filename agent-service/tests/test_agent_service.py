@@ -1,4 +1,4 @@
-"""agent-service on anvil-forge: sessions, governance, and the HTTP shapes
+"""agent-service on bastion: sessions, governance, and the HTTP shapes
 the web UI depends on."""
 
 import asyncio
@@ -205,5 +205,5 @@ async def test_otp_never_reaches_the_agent_even_if_the_bank_leaks_it(service):
     assert "482913" not in _json.dumps(llm.requests)  # never in the model's context
     export = (await client.get("/traces/export", params={"session_id": "leak"})).text
     assert "482913" not in export
-    from anvil_forge import LocalSink
+    from bastion import LocalSink
     assert "482913" not in _json.dumps(LocalSink().read())

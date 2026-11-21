@@ -1,6 +1,6 @@
-"""Ironclad Agent Service: the banking assistant, on the anvil-forge SDK.
+"""Ironclad Agent Service: the banking assistant, on the bastion SDK.
 
-anvil-forge runs the agent (Agent Forge) under Anvil governance: the
+bastion runs the agent (Agent Forge) under Anvil governance: the
 agent, its tools and its policy all come from anvil-ironclad.yaml. This
 service only adds what is Ironclad-specific: the signed-in user's ID on
 every tool call, and the HTTP shapes the web UI expects.
@@ -27,7 +27,7 @@ _forge_env = os.path.join(os.path.dirname(__file__), "../../../agent-forge/.env"
 if os.path.exists(_forge_env):
     load_dotenv(_forge_env)
 
-from anvil_forge import Platform, load_config  # noqa: E402
+from bastion import Platform, load_config  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(name)s  %(message)s")
 logger = logging.getLogger("ironclad-agent")
@@ -56,27 +56,27 @@ def prepare_tool_call(ctx: Any, tool: str, params: dict[str, Any]) -> dict[str, 
 
 
 def build_platform(**platform_kwargs: Any) -> Platform:
-    """The agent's platform, from the anvil-forge control plane or the local YAML.
+    """The agent's platform, from the bastion control plane or the local YAML.
 
-    Remote mode, when ANVIL_FORGE_URL and ANVIL_FORGE_KEY are both set: the
+    Remote mode, when BASTION_URL and BASTION_KEY are both set: the
     bundle (tools, agent, prompt version, policy) comes from the service and
-    is re-checked every ANVIL_FORGE_REFRESH_SECONDS (default 30), so prompt
+    is re-checked every BASTION_REFRESH_SECONDS (default 30), so prompt
     edits and rollbacks there apply without a restart. Otherwise the local
     anvil-ironclad.yaml is used, as before.
 
     *platform_kwargs* go to Platform (tests pass stub LLM clients, an HTTP
     transport for the bank, and in remote mode a service transport).
     """
-    url, key = os.getenv("ANVIL_FORGE_URL"), os.getenv("ANVIL_FORGE_KEY")
+    url, key = os.getenv("BASTION_URL"), os.getenv("BASTION_KEY")
     if url and key:
         platform = Platform.from_service(
             url, key, prepare_tool_call=prepare_tool_call,
-            refresh_interval=float(os.getenv("ANVIL_FORGE_REFRESH_SECONDS", "30")),
+            refresh_interval=float(os.getenv("BASTION_REFRESH_SECONDS", "30")),
             **platform_kwargs,
         )
         if platform.app != APP:
-            raise RuntimeError(f"ANVIL_FORGE_KEY belongs to app {platform.app!r}, not {APP!r}.")
-        logger.info("anvil-forge remote mode: %s, revision %s", url, platform.bundle_revision)
+            raise RuntimeError(f"BASTION_KEY belongs to app {platform.app!r}, not {APP!r}.")
+        logger.info("bastion remote mode: %s, revision %s", url, platform.bundle_revision)
         return platform
     raw = yaml.safe_load(open(CONFIG_PATH))
     if os.getenv("OPENAI_MODEL"):  # local mode only; in remote mode the service decides the model

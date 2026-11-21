@@ -7,6 +7,7 @@ anthropic>=0.40.0
 
 pyyaml>=6.0
 
-# The anvil-forge SDK (brings anvil-ai and agent-forge at the commits it pins).
+# The bastion SDK (brings anvil-ai and agent-forge at the commits it pins).
+# Its GitHub repo is still named anvil-forge; the package is bastion.
 # Pinned by full commit SHA; the SDK lives in the repo's sdk/ folder.
-anvil-forge @ git+https://github.com/infoshikharpathak/anvil-forge.git@8c9659e47e8721305eeded273745bfde81ddc5b4#subdirectory=sdk
+bastion @ git+https://github.com/infoshikharpathak/anvil-forge.git@da7088bdaa75bbf31ea182fcf88f52e26e99862e#subdirectory=sdk

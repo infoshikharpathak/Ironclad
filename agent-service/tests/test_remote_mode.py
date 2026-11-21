@@ -1,4 +1,4 @@
-"""ANVIL_FORGE_URL + ANVIL_FORGE_KEY: the agent runs on the control plane's bundle."""
+"""BASTION_URL + BASTION_KEY: the agent runs on the control plane's bundle."""
 
 import copy
 import hashlib
@@ -12,10 +12,10 @@ import yaml
 from .conftest import StubBank, StubLLM
 
 CONFIG = yaml.safe_load((Path(__file__).resolve().parents[2] / "anvil-ironclad.yaml").read_text())
-KEY = "afk_" + "k" * 43
+KEY = "bk_" + "k" * 43
 
 
-class FakeForge:
+class FakeBastion:
     """The control plane's GET /v1/sdk/bundle, with ETags."""
 
     def __init__(self, bundle):
@@ -38,10 +38,10 @@ class FakeForge:
 async def remote(monkeypatch, tmp_path):
     import app.main as main
 
-    monkeypatch.setenv("ANVIL_FORGE_URL", "http://forge.test")
-    monkeypatch.setenv("ANVIL_FORGE_KEY", KEY)
-    monkeypatch.setenv("ANVIL_FORGE_REFRESH_SECONDS", "0")  # tests refresh explicitly
-    forge, llm, bank = FakeForge(CONFIG), StubLLM({}), StubBank()
+    monkeypatch.setenv("BASTION_URL", "http://bastion.test")
+    monkeypatch.setenv("BASTION_KEY", KEY)
+    monkeypatch.setenv("BASTION_REFRESH_SECONDS", "0")  # tests refresh explicitly
+    forge, llm, bank = FakeBastion(CONFIG), StubLLM({}), StubBank()
     platform = main.build_platform(openai_client=llm, http_transport=httpx.MockTransport(bank),
                                    service_transport=httpx.MockTransport(forge), cache_dir=tmp_path)
     await platform.start()
@@ -83,7 +83,7 @@ def test_key_for_another_app_is_refused(monkeypatch, tmp_path):
     import app.main as main
 
     other = copy.deepcopy(CONFIG)
-    forge = FakeForge(other)
+    forge = FakeBastion(other)
     forge_resp = forge.__call__
 
     def as_other_app(request):
@@ -93,8 +93,8 @@ def test_key_for_another_app_is_refused(monkeypatch, tmp_path):
         body["bundle"] = {"apps": {"notify": {"tools": {}}}}
         return httpx.Response(200, json=body)
 
-    monkeypatch.setenv("ANVIL_FORGE_URL", "http://forge.test")
-    monkeypatch.setenv("ANVIL_FORGE_KEY", KEY)
+    monkeypatch.setenv("BASTION_URL", "http://bastion.test")
+    monkeypatch.setenv("BASTION_KEY", KEY)
     with pytest.raises(RuntimeError, match="belongs to app 'notify'"):
         main.build_platform(service_transport=httpx.MockTransport(as_other_app), cache_dir=tmp_path)
 
@@ -102,7 +102,7 @@ def test_key_for_another_app_is_refused(monkeypatch, tmp_path):
 def test_without_the_env_vars_it_is_local_mode(monkeypatch):
     import app.main as main
 
-    monkeypatch.delenv("ANVIL_FORGE_URL", raising=False)
-    monkeypatch.delenv("ANVIL_FORGE_KEY", raising=False)
+    monkeypatch.delenv("BASTION_URL", raising=False)
+    monkeypatch.delenv("BASTION_KEY", raising=False)
     platform = main.build_platform()
     assert platform.bundle_revision is None and platform.app == "ironclad"
