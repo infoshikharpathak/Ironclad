@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
+from anvil_forge.classifier import CLASSIFIER_PROMPT
 from openai.types.chat import ChatCompletion
 
 os.environ.setdefault("OPENAI_API_KEY", "dummy-key-for-tests")
@@ -37,7 +38,7 @@ class StubLLM:
 
     async def _create(self, **kwargs):
         msgs = kwargs["messages"]
-        if "injection-detection classifier" in msgs[0]["content"]:
+        if msgs[0]["content"] == CLASSIFIER_PROMPT:  # Anvil's injection scan, via the SDK
             return _completion({"role": "assistant", "content": '{"injection": false}'}, "stop")
         self.requests.append(msgs)
         last_user = max(i for i, m in enumerate(msgs) if _role(m) == "user")

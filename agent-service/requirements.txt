@@ -9,4 +9,4 @@ pyyaml>=6.0
 
 # The anvil-forge SDK (brings anvil-ai and agent-forge at the commits it pins).
 # Pinned by full commit SHA; the SDK lives in the repo's sdk/ folder.
-anvil-forge @ git+https://github.com/infoshikharpathak/anvil-forge.git@744f97df80b43cbc65a4fce308fe0cb00221275e#subdirectory=sdk
+anvil-forge @ git+https://github.com/infoshikharpathak/anvil-forge.git@33f15a424eabcb81f7937bf485bb9d63ea614c33#subdirectory=sdk
