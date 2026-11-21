@@ -88,7 +88,13 @@ def _platform() -> Platform:
 
 class ChatRequest(BaseModel):
     message: str
-    session_id: str = "default"
+    session_id: str
+    """One per browser tab. Turns in a session share the agent's memory and
+    Anvil's sequence state (look-ups in one message satisfy a transfer in the next)."""
+
+
+class ResetRequest(BaseModel):
+    session_id: str
 
 
 class ToolCallInfo(BaseModel):
@@ -129,8 +135,8 @@ async def chat(req: ChatRequest):
 
 
 @app.post("/agent/reset")
-async def reset_agent(session_id: str = "default"):
-    await _platform().end_session(session_id)
+async def reset_agent(req: ResetRequest):
+    await _platform().end_session(req.session_id)
     return {"status": "ok", "message": "Conversation and Anvil session reset."}
 
 
