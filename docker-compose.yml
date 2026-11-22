@@ -15,6 +15,7 @@ services:
       - ./db/002_merchants.sql:/docker-entrypoint-initdb.d/02-merchants.sql
       - ./db/003_policies.sql:/docker-entrypoint-initdb.d/03-policies.sql
       - ./db/004_policy_hybrid.sql:/docker-entrypoint-initdb.d/04-policy-hybrid.sql
+      - ./db/005_policy_access.sql:/docker-entrypoint-initdb.d/05-policy-access.sql
     ports:
       - "5432:5432"
     healthcheck:

@@ -9,6 +9,11 @@ Search modes (all match against the ~60-token child chunks):
 - hybrid_parent (the default): hybrid, then grouped by parent: each matching
             ## section is returned once, with its whole text.
 
+Access levels: every query takes the caller's levels (from its key) and
+filters on them in SQL, in the vector query, the full-text query and the
+parent fetch, so a caller only ever ranks documents it may read: hidden
+documents can't take result slots, change scores, or reveal that they exist.
+
 "Not covered": fused scores aren't similarities, so hybrid modes return
 nothing unless the best child clears VECTOR_GATE on cosine similarity or
 KEYWORD_GATE on full-text rank. These and the fusion settings were tuned on
@@ -94,31 +99,34 @@ async def index_chunks(conn, chunks: list[Chunk], embedder: Embedder, *, dry_run
         for parent_id, c in parents.items():
             await conn.execute(
                 """
-                INSERT INTO policy_sections (id, doc_slug, doc_title, section, effective_date, content, content_hash)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                INSERT INTO policy_sections (id, doc_slug, doc_title, section, effective_date, content, content_hash,
+                                             level)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 ON CONFLICT (id) DO UPDATE SET doc_slug = EXCLUDED.doc_slug, doc_title = EXCLUDED.doc_title,
                     section = EXCLUDED.section, effective_date = EXCLUDED.effective_date,
-                    content = EXCLUDED.content, content_hash = EXCLUDED.content_hash, indexed_at = now()
+                    content = EXCLUDED.content, content_hash = EXCLUDED.content_hash, level = EXCLUDED.level,
+                    indexed_at = now()
                 WHERE policy_sections.content_hash <> EXCLUDED.content_hash
                 """,
                 parent_id, c.doc_slug, c.doc_title, c.section, c.effective_date, c.section_content, c.section_hash(),
+                c.level,
             )
         for chunk, vec in zip(todo, vectors):
             await conn.execute(
                 """
                 INSERT INTO policy_chunks (id, parent_id, doc_slug, doc_title, section, chunk_index, effective_date,
-                                           content, content_hash, embedding_model, embedding, indexed_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::vector, now())
+                                           content, content_hash, embedding_model, embedding, level, indexed_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::vector, $12, now())
                 ON CONFLICT (id) DO UPDATE SET
                     parent_id = EXCLUDED.parent_id, doc_slug = EXCLUDED.doc_slug, doc_title = EXCLUDED.doc_title,
                     section = EXCLUDED.section, chunk_index = EXCLUDED.chunk_index,
                     effective_date = EXCLUDED.effective_date, content = EXCLUDED.content,
                     content_hash = EXCLUDED.content_hash, embedding_model = EXCLUDED.embedding_model,
-                    embedding = EXCLUDED.embedding, indexed_at = now()
+                    embedding = EXCLUDED.embedding, level = EXCLUDED.level, indexed_at = now()
                 """,
                 chunk.id, chunk.parent_id, chunk.doc_slug, chunk.doc_title, chunk.section, chunk.chunk_index,
                 chunk.effective_date, chunk.content, chunk.content_hash(embedder.model), embedder.model,
-                to_pgvector(vec),
+                to_pgvector(vec), chunk.level,
             )
         # Chunks indexed before parents existed get theirs.
         await conn.execute("UPDATE policy_chunks SET parent_id = split_part(id, ':', 1) || ':' || split_part(id, ':', 2) "
@@ -135,21 +143,22 @@ async def index_chunks(conn, chunks: list[Chunk], embedder: Embedder, *, dry_run
 _CHILD_COLUMNS = "id, parent_id, doc_slug, doc_title, section, effective_date, content"
 
 
-async def vector_children(pool, query_vec: list[float], model: str, limit: int = CANDIDATES) -> list[dict]:
+async def vector_children(pool, query_vec: list[float], model: str, levels: list[str],
+                          limit: int = CANDIDATES) -> list[dict]:
     rows = await pool.fetch(
         f"""
         SELECT {_CHILD_COLUMNS}, 1 - (embedding <=> $1::vector) AS score
         FROM policy_chunks
-        WHERE embedding_model = $2
+        WHERE embedding_model = $2 AND level = ANY($4::text[])
         ORDER BY embedding <=> $1::vector
         LIMIT $3
         """,
-        to_pgvector(query_vec), model, limit,
+        to_pgvector(query_vec), model, limit, levels,
     )
     return [dict(r) | {"score": float(r["score"])} for r in rows]
 
 
-async def keyword_children(pool, query: str, limit: int = CANDIDATES) -> list[dict]:
+async def keyword_children(pool, query: str, levels: list[str], limit: int = CANDIDATES) -> list[dict]:
     """Full-text search: any of the question's (stemmed, stop-word-free)
     terms, ranked by ts_rank_cd. OR, not AND: a natural-language question
     rarely has every one of its words in one chunk."""
@@ -158,11 +167,11 @@ async def keyword_children(pool, query: str, limit: int = CANDIDATES) -> list[di
         WITH q AS (SELECT NULLIF(replace(plainto_tsquery('english', $1)::text, '&', '|'), '')::tsquery AS tsq)
         SELECT {_CHILD_COLUMNS}, ts_rank_cd(search_tsv, q.tsq) AS score
         FROM policy_chunks, q
-        WHERE q.tsq IS NOT NULL AND search_tsv @@ q.tsq
+        WHERE q.tsq IS NOT NULL AND search_tsv @@ q.tsq AND level = ANY($3::text[])
         ORDER BY score DESC, id
         LIMIT $2
         """,
-        query, limit,
+        query, limit, levels,
     )
     return [dict(r) | {"score": float(r["score"])} for r in rows]
 
@@ -180,10 +189,11 @@ def fuse(vector: list[dict], keyword: list[dict], k: int = RRF_K, keyword_weight
     return sorted(fused.values(), key=lambda r: (-r["rrf"], r["id"]))
 
 
-async def parents(pool, parent_ids: list[str]) -> dict[str, dict]:
+async def parents(pool, parent_ids: list[str], levels: list[str]) -> dict[str, dict]:
     rows = await pool.fetch(
-        "SELECT id, doc_slug, doc_title, section, effective_date, content FROM policy_sections WHERE id = ANY($1::text[])",
-        parent_ids,
+        "SELECT id, doc_slug, doc_title, section, effective_date, content FROM policy_sections "
+        "WHERE id = ANY($1::text[]) AND level = ANY($2::text[])",
+        parent_ids, levels,
     )
     return {r["id"]: dict(r) for r in rows}
 
@@ -224,27 +234,31 @@ def select(vec_rows: list[dict], kw_rows: list[dict], mode: str, top_k: int, gat
     return out
 
 
-async def candidates(pool, embedder: Embedder, query: str, mode: str) -> tuple[list[dict], list[dict], int]:
-    """Vector and keyword candidates for *query* (each only if *mode* uses it)."""
+async def candidates(pool, embedder: Embedder, query: str, mode: str,
+                     levels: list[str]) -> tuple[list[dict], list[dict], int]:
+    """Vector and keyword candidates for *query* (each only if *mode* uses it),
+    from documents at *levels* only."""
     tokens = 0
     vec_rows: list[dict] = []
     if mode != "keyword":
         (vec,), tokens = await embedder.embed([query])
-        vec_rows = await vector_children(pool, vec, embedder.model)
-    kw_rows = await keyword_children(pool, query) if mode != "vector" else []
+        vec_rows = await vector_children(pool, vec, embedder.model, levels)
+    kw_rows = await keyword_children(pool, query, levels) if mode != "vector" else []
     return vec_rows, kw_rows, tokens
 
 
-async def search(pool, embedder: Embedder, query: str, top_k: int, *, mode: str | None = None,
+async def search(pool, embedder: Embedder, query: str, top_k: int, *, levels: list[str], mode: str | None = None,
                  gate: Gate | None = None, threshold: float | None = None) -> tuple[list[dict], int]:
     """Results for *query* and the tokens spent embedding it. See the module
     docstring for the modes (default: POLICY_SEARCH_MODE, else hybrid_parent);
     *threshold* is the vector mode's minimum score."""
     gate = gate or Gate()
     mode = mode or default_mode()
-    vec_rows, kw_rows, tokens = await candidates(pool, embedder, query, mode)
+    if not levels:
+        return [], 0
+    vec_rows, kw_rows, tokens = await candidates(pool, embedder, query, mode, levels)
     picked = select(vec_rows, kw_rows, mode, top_k, gate, threshold)
     if mode != "hybrid_parent":
         return [_result(r, score) for r, score in picked], tokens
-    sections = await parents(pool, [r["parent_id"] for r, _ in picked])
+    sections = await parents(pool, [r["parent_id"] for r, _ in picked], levels)
     return [_result(sections[r["parent_id"]], score) for r, score in picked if r["parent_id"] in sections], tokens

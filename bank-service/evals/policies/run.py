@@ -67,7 +67,8 @@ async def rankings(max_tokens: int, embedder, questions: list[dict], qvecs: list
     await admin.execute(f"CREATE SCHEMA {schema}")
     try:
         conn = await asyncpg.connect(config.DATABASE_URL, server_settings={"search_path": f"{schema},public"})
-        await conn.execute((DB_DIR / "003_policies.sql").read_text())
+        for name in ("003_policies.sql", "004_policy_hybrid.sql", "005_policy_access.sql"):
+            await conn.execute((DB_DIR / name).read_text())
         chunks = chunking.load_policies(max_tokens=max_tokens, overlap_tokens=max(10, max_tokens // 10))
         report = await store.index_chunks(conn, chunks, embedder)
         ranked = {}

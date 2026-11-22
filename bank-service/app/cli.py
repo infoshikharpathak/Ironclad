@@ -3,6 +3,9 @@
     python -m app.cli migrate
         Apply db/002_merchants.sql and db/003_policies.sql to an existing
         database (idempotent).
+    python -m app.cli policy-keys create <name> --levels public[,internal]
+        Issues a policy-access key (pk_...) for GET /policies/search, printed once.
+    python -m app.cli policy-keys list | revoke <name>
     python -m app.cli index-policies [--dry-run]
         Chunk bank-service/policies/*.md, embed changed chunks, drop removed ones.
     python -m app.cli merchants list
@@ -28,7 +31,7 @@ from . import config
 from .services import merchants as merchant_keys
 
 DB_DIR = Path(__file__).resolve().parents[2] / "db"
-MIGRATIONS = ["002_merchants.sql", "003_policies.sql", "004_policy_hybrid.sql"]  # init.sql is the base schema
+MIGRATIONS = ["002_merchants.sql", "003_policies.sql", "004_policy_hybrid.sql", "005_policy_access.sql"]  # init.sql is the base schema
 _ID = re.compile(r"^[a-z][a-z0-9_]{1,39}$")
 
 
@@ -130,6 +133,37 @@ async def index_policies(dry_run: bool, max_tokens: int | None) -> None:
         print(f"Embedding: {embedder.model}, {report.tokens} tokens, cost ${report.cost_usd}")
 
 
+async def policy_keys(action: str, name: str | None, levels: str | None) -> None:
+    from .policies import access
+
+    conn = await _connect()
+    try:
+        if action == "list":
+            for r in await conn.fetch("SELECT name, levels, created_at, revoked_at FROM policy_access_keys ORDER BY name"):
+                state = f"revoked {r['revoked_at']:%Y-%m-%d}" if r["revoked_at"] else "active"
+                print(f"{r['name']:<24} {','.join(r['levels']):<18} {state}")
+        elif action == "create":
+            wanted = [lv.strip() for lv in (levels or "").split(",") if lv.strip()]
+            if not wanted or not set(wanted) <= {"public", "internal"}:
+                sys.exit("--levels must be public, internal or public,internal")
+            if "internal" in wanted and "public" not in wanted:
+                wanted.insert(0, "public")  # internal readers can read public documents too
+            try:
+                key = await access.create(conn, name, wanted)
+            except asyncpg.UniqueViolationError:
+                sys.exit(f"a policy key named {name!r} already exists")
+            print(f"Policy key {name!r} ({', '.join(wanted)}), shown once; only its hash is stored:")
+            print(key)
+        else:
+            done = await conn.execute("UPDATE policy_access_keys SET revoked_at = now() WHERE name = $1 "
+                                      "AND revoked_at IS NULL", name)
+            if done == "UPDATE 0":
+                sys.exit(f"no active policy key named {name!r}")
+            print(f"{name}: revoked")
+    finally:
+        await conn.close()
+
+
 def _print_key(merchant_id: str, key: str) -> None:
     print(f"Merchant key for {merchant_id} (shown once; only its hash is stored):")
     print(key)
@@ -139,6 +173,13 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="python -m app.cli", description="Ironclad bank admin")
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("migrate", help="apply db/002_merchants.sql and db/003_policies.sql (idempotent)")
+    pk = sub.add_parser("policy-keys", help="manage policy-access keys").add_subparsers(dest="action", required=True)
+    pkc = pk.add_parser("create")
+    pkc.add_argument("name")
+    pkc.add_argument("--levels", required=True, help="public or public,internal")
+    pk.add_parser("list")
+    pkr = pk.add_parser("revoke")
+    pkr.add_argument("name")
     ix = sub.add_parser("index-policies", help="embed bank-service/policies/*.md into policy_chunks")
     ix.add_argument("--dry-run", action="store_true", help="only report what would change")
     ix.add_argument("--max-tokens", type=int, default=None,
@@ -159,6 +200,8 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.cmd == "migrate":
         coro = migrate()
+    elif args.cmd == "policy-keys":
+        coro = policy_keys(args.action, getattr(args, "name", None), getattr(args, "levels", None))
     elif args.cmd == "index-policies":
         coro = index_policies(args.dry_run, args.max_tokens)
     elif args.action == "list":

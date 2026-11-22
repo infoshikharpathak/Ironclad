@@ -95,14 +95,14 @@ async def main_async() -> None:
         pool = await asyncpg.create_pool(config.DATABASE_URL, min_size=1, max_size=4,
                                          server_settings={"search_path": f"{schema},public"})
         async with pool.acquire() as conn:
-            for name in ("003_policies.sql", "004_policy_hybrid.sql"):
+            for name in ("003_policies.sql", "004_policy_hybrid.sql", "005_policy_access.sql"):
                 await conn.execute((DB_DIR / name).read_text())
             report = await store.index_chunks(conn, chunking.load_policies(), embedder)
         qvecs, q_tokens = await embedder.embed([q["question"] for q in dev + held])
         cands = {}
         for q, vec in zip(dev + held, qvecs):
-            cands[q["id"]] = (await store.vector_children(pool, vec, embedder.model),
-                              await store.keyword_children(pool, q["question"]))
+            cands[q["id"]] = (await store.vector_children(pool, vec, embedder.model, ["public"]),
+                              await store.keyword_children(pool, q["question"], ["public"]))
         await pool.close()
     finally:
         await admin.execute(f"DROP SCHEMA {schema} CASCADE")

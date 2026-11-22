@@ -1,14 +1,20 @@
 """Indexing policy_chunks and GET /policies/search (Postgres + pgvector, fake embedder)."""
 
+import json
+
 import pytest
 
-from app.policies import chunking, embeddings, store
+from app.policies import access, chunking, embeddings, store
 from app.routes import policies as policies_route
 
 pytestmark = pytest.mark.anyio
 
 DOCS = {
-    "otp": """# OTP Security
+    "otp": """---
+level: public
+---
+
+# OTP Security
 
 Effective date: 2026-10-01
 
@@ -20,7 +26,11 @@ A one-time passcode is valid for 5 minutes after the transfer request is created
 
 You have 3 attempts to enter the correct passcode before the transfer is cancelled.
 """,
-    "savings": """# Savings Interest
+    "savings": """---
+level: public
+---
+
+# Savings Interest
 
 Effective date: 2026-09-01
 
@@ -74,13 +84,34 @@ async def test_reindexing_is_idempotent_and_removes_deleted_chunks(bank):
     assert "10 minutes" in row["content"]
 
 
+async def keys(pool):
+    async with pool.acquire() as conn:
+        return (await access.create(conn, "partner", ["public"]),
+                await access.create(conn, "internal", ["public", "internal"]))
+
+
+def auth(key):
+    return {"Authorization": f"Bearer {key}"}
+
+
+class Client:
+    """The test client, with a key on every request."""
+
+    def __init__(self, client, key):
+        self.client, self.key = client, key
+
+    async def get(self, url, **kw):
+        return await self.client.get(url, headers={**auth(self.key), **kw.pop("headers", {})}, **kw)
+
+
 @pytest.fixture
 async def indexed(bank, monkeypatch):
     client, pool, _ = bank
     async with pool.acquire() as conn:
         await store.index_chunks(conn, chunks(), embeddings.FakeEmbedder())
     monkeypatch.setattr(policies_route, "get_embedder", lambda: embeddings.FakeEmbedder())
-    return client
+    partner, _ = await keys(pool)
+    return Client(client, partner)
 
 
 async def test_search_returns_sections_with_metadata(indexed):
@@ -118,16 +149,21 @@ async def test_search_validates_q_and_top_k(indexed, params):
 
 
 async def test_search_without_an_embedder_is_503(bank, monkeypatch):
-    client, _, _ = bank
+    client, pool, _ = bank
+    partner, _ = await keys(pool)
     monkeypatch.setattr(policies_route, "get_embedder", lambda: None)
-    r = await client.get("/policies/search", params={"q": "valid query"})
+    r = await client.get("/policies/search", params={"q": "valid query"}, headers=auth(partner))
     assert (r.status_code, r.json()["error"]) == (503, "POLICY_SEARCH_UNAVAILABLE")
 
 
 
 # ── hybrid parent-child ────────────────────────────────────────────────────
 
-LONG = {"limits": """# Transfer Limits
+LONG = {"limits": """---
+level: public
+---
+
+# Transfer Limits
 
 Effective date: 2026-10-01
 
@@ -157,7 +193,9 @@ async def test_parent_section_is_returned_once_with_its_whole_text(bank, monkeyp
     assert len(children) >= 3  # several children share one parent
     monkeypatch.setattr(policies_route, "get_embedder", lambda: embeddings.FakeEmbedder())
     monkeypatch.setenv("POLICY_VECTOR_GATE", "0")
-    r = await client.get("/policies/search", params={"q": "transfers to other people limit per transfer daily total"})
+    partner, _ = await keys(pool)
+    r = await client.get("/policies/search", params={"q": "transfers to other people limit per transfer daily total"},
+                         headers=auth(partner))
     results = r.json()["results"]
     assert [x["section"] for x in results].count("Transfers to other people") == 1
     top = results[0]
@@ -170,9 +208,9 @@ async def test_parent_section_is_returned_once_with_its_whole_text(bank, monkeyp
 async def test_keyword_search_finds_exact_terms(bank):
     _, pool, _ = bank
     await index_small(pool, LONG)
-    rows = await store.keyword_children(pool, "What is the OTP rule?")
+    rows = await store.keyword_children(pool, "What is the OTP rule?", ["public"])
     assert rows and rows[0]["section"] == "Transfers to other people" and "OTP" in rows[0]["content"]
-    assert await store.keyword_children(pool, "the and of") == []  # only stop words: no query
+    assert await store.keyword_children(pool, "the and of", ["public"]) == []  # only stop words: no query
 
 
 async def test_reindex_drops_parents_whose_section_is_gone(bank):
@@ -188,3 +226,114 @@ def test_fusion_ranks_by_weighted_reciprocal_rank():
     fused = store.fuse([a, b], [{**b, "score": 1.0}], k=5, keyword_weight=0.25)
     assert [r["id"] for r in fused] == ["b", "a"]  # b: 1/7 + 0.25/6 > a: 1/6
     assert fused[0]["vector_score"] == 0.8 and fused[0]["keyword_score"] == 1.0
+
+
+
+# ── access levels ──────────────────────────────────────────────────────────
+
+SECRET = {"fraud": """---
+level: internal
+---
+
+# Fraud Monitoring Thresholds
+
+Effective date: 2026-11-01
+
+## Transfer pattern alerts
+
+A transfer to a new recipient above $2,500 is flagged. Three transfers to new recipients in one hour are flagged.
+
+## Review times
+
+High-risk flags are reviewed within 30 minutes.
+""", "limits": LONG["limits"]}
+
+
+@pytest.fixture
+async def mixed(bank, monkeypatch):
+    client, pool, _ = bank
+    await index_small(pool, SECRET, max_tokens=400)
+    monkeypatch.setattr(policies_route, "get_embedder", lambda: embeddings.FakeEmbedder())
+    partner, internal = await keys(pool)
+    return client, pool, partner, internal
+
+
+QUESTION = "transfer to a new recipient flagged per transfer limit"
+
+
+async def test_partner_never_gets_internal_chunks_from_any_query(mixed):
+    _, pool, _, _ = mixed
+    vec = embeddings.FakeEmbedder.vector(QUESTION)
+    assert {r["doc_slug"] for r in await store.vector_children(pool, vec, "fake-embedding", ["public", "internal"])} \
+        == {"fraud", "limits"}  # both match...
+    assert {r["doc_slug"] for r in await store.vector_children(pool, vec, "fake-embedding", ["public"])} == {"limits"}
+    assert {r["doc_slug"] for r in await store.keyword_children(pool, QUESTION, ["public"])} == {"limits"}
+    assert {r["doc_slug"] for r in await store.keyword_children(pool, QUESTION, ["public", "internal"])} \
+        == {"fraud", "limits"}
+    internal_ids = ["fraud:transfer-pattern-alerts", "fraud:review-times"]
+    assert await store.parents(pool, internal_ids, ["public"]) == {}  # even asked for by id
+    assert set(await store.parents(pool, internal_ids, ["public", "internal"])) == set(internal_ids)
+
+
+async def test_endpoint_levels_come_from_the_key(mixed, monkeypatch):
+    client, _, partner, internal = mixed
+    monkeypatch.setenv("POLICY_VECTOR_GATE", "0")
+    p = (await client.get("/policies/search", params={"q": QUESTION, "top_k": 5}, headers=auth(partner))).json()
+    i = (await client.get("/policies/search", params={"q": QUESTION, "top_k": 5}, headers=auth(internal))).json()
+    assert {r["doc_slug"] for r in p["results"]} == {"limits"}
+    assert {r["doc_slug"] for r in i["results"]} == {"fraud", "limits"}
+    assert "fraud" not in json.dumps(p).lower() and "2,500" not in json.dumps(p)
+
+
+async def test_hidden_matches_dont_reduce_the_partners_results(mixed, monkeypatch):
+    """The internal sections rank above the public ones for this question;
+    the partner still gets top_k public sections, since filtering happens
+    before ranking."""
+    client, _, partner, internal = mixed
+    monkeypatch.setenv("POLICY_VECTOR_GATE", "0")
+    i = (await client.get("/policies/search", params={"q": QUESTION, "top_k": 2}, headers=auth(internal))).json()
+    assert i["results"][0]["doc_slug"] == "fraud"
+    p = (await client.get("/policies/search", params={"q": QUESTION, "top_k": 2}, headers=auth(partner))).json()
+    assert [r["doc_slug"] for r in p["results"]] == ["limits", "limits"]
+
+
+async def test_internal_only_question_is_not_covered_for_the_partner(mixed):
+    client, _, partner, internal = mixed
+    q = {"q": "How fast are high-risk flags reviewed?"}
+    assert (await client.get("/policies/search", params=q, headers=auth(internal))).json()["results"]
+    assert (await client.get("/policies/search", params=q, headers=auth(partner))).json() == {
+        "query": q["q"], "results": []}  # the same answer as any uncovered question
+
+
+@pytest.mark.parametrize("headers,code", [({}, "POLICY_KEY_REQUIRED"),
+                                          ({"Authorization": "Bearer pk_not-a-key"}, "POLICY_KEY_INVALID"),
+                                          ({"Authorization": "Bearer mk_wrong-kind"}, "POLICY_KEY_REQUIRED")])
+async def test_missing_or_invalid_key_is_401(mixed, headers, code):
+    client, *_ = mixed
+    r = await client.get("/policies/search", params={"q": "valid query"}, headers=headers)
+    assert (r.status_code, r.json()["error"]) == (401, code)
+
+
+async def test_revoked_key_is_401(mixed):
+    client, pool, partner, _ = mixed
+    await pool.execute("UPDATE policy_access_keys SET revoked_at = now() WHERE name = 'partner'")
+    assert (await client.get("/policies/search", params={"q": "valid query"}, headers=auth(partner))).status_code == 401
+
+
+@pytest.mark.parametrize("extra", [{"level": "internal"}, {"audience": "employee"}, {"levels": "public,internal"}])
+async def test_level_params_are_rejected(mixed, extra):
+    client, _, partner, _ = mixed
+    r = await client.get("/policies/search", params={"q": "valid query", **extra}, headers=auth(partner))
+    assert (r.status_code, r.json()["error"]) == (422, "UNKNOWN_PARAMETER")
+
+
+async def test_reindexing_keeps_levels(mixed):
+    _, pool, _, _ = mixed
+    await index_small(pool, SECRET, max_tokens=400)
+    rows = await pool.fetch("SELECT DISTINCT doc_slug, level FROM policy_chunks ORDER BY doc_slug")
+    assert [(r["doc_slug"], r["level"]) for r in rows] == [("fraud", "internal"), ("limits", "public")]
+    rows = await pool.fetch("SELECT DISTINCT doc_slug, level FROM policy_sections ORDER BY doc_slug")
+    assert [(r["doc_slug"], r["level"]) for r in rows] == [("fraud", "internal"), ("limits", "public")]
+    # a document moved to public is re-indexed with its new level
+    await index_small(pool, {**SECRET, "fraud": SECRET["fraud"].replace("level: internal", "level: public")}, 400)
+    assert await pool.fetchval("SELECT count(*) FROM policy_chunks WHERE level = 'internal'") == 0
