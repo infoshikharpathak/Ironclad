@@ -82,6 +82,7 @@ npm run dev
 | POST | `/transfers/{id}/cancel` | Decline a pending transfer |
 | POST | `/payments/requests` | Merchant payment request (merchant key) |
 | GET | `/payments/requests/{id}` | A merchant's own payment request (merchant key) |
+| POST | `/payments/requests/{id}/cancel` | Withdraw a merchant's own pending request (merchant key) |
 | WS | `/ws/{user_id}` | Real-time notifications |
 
 ## Merchant payments
@@ -138,11 +139,20 @@ python -m app.cli merchants list
 
 **`GET /payments/requests/{id}`** returns the request if it's this
 merchant's (any other ID is 404, so merchants can't probe each other).
-`status` is `pending_otp`, `confirmed`, `cancelled` (declined, too many OTP
-attempts, or failed at confirm) or `expired` (past `OTP_TTL_SECONDS`;
-applied when read).
+`status` is `pending_otp`, `confirmed`, `cancelled` (declined, withdrawn by
+the merchant, too many OTP attempts, or failed at confirm) or `expired` (past
+`OTP_TTL_SECONDS`; applied when read).
+
+**`POST /payments/requests/{id}/cancel`** withdraws one of the merchant's
+own `pending_otp` requests (`closed_reason: merchant_cancelled`); the user's
+OTP modal for it closes. Cancelling an already cancelled or expired request
+returns it unchanged; a confirmed one is 409 `PAYMENT_ALREADY_CONFIRMED`.
+There's no refund API.
 
 ## Known limitations
+- `POST /accounts/reset` resets the user's own balances and deletes their
+  transactions, including merchant payments, but doesn't touch merchants'
+  settlement account balances.
 
 - `/transfers/pending` and `/transfers/{id}/confirm` are not authenticated.
   User identity is a parameter. Production would require the user's session
