@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
-from bastion.classifier import CLASSIFIER_PROMPT
+from bastion.classifier import is_classifier_request
 from openai.types.chat import ChatCompletion
 
 os.environ.setdefault("OPENAI_API_KEY", "dummy-key-for-tests")
@@ -38,7 +38,7 @@ class StubLLM:
 
     async def _create(self, **kwargs):
         msgs = kwargs["messages"]
-        if msgs[0]["content"] == CLASSIFIER_PROMPT:  # Anvil's injection scan, via the SDK
+        if is_classifier_request(msgs):  # Anvil's injection scan, via the SDK
             return _completion({"role": "assistant", "content": '{"injection": false}'}, "stop")
         self.requests.append(msgs)
         last_user = max(i for i, m in enumerate(msgs) if _role(m) == "user")
