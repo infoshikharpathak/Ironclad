@@ -207,9 +207,6 @@ held-out set: treat it as a regression check. A full grid run costs about
 $0.0002. Full grid: `evals/policies/results/summary.md`.
 
 ## Known limitations
-- The transfer limits in `policies/transfer-limits.md` ($5,000 per transfer
-  and $10,000 per day to other people) aren't enforced by the bank service
-  yet; only the balance is.
 - `POST /accounts/reset` resets the user's own balances and deletes their
   transactions, including merchant payments, but doesn't touch merchants'
   settlement account balances.

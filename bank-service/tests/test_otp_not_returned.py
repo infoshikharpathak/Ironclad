@@ -27,6 +27,10 @@ class FakePool:
             return next((t for t in self.transactions.values() if t["idempotency_key"] == args[0]), None)
         raise AssertionError(sql)
 
+    async def fetchval(self, sql, *args):
+        assert "SUM(t.amount)" in sql  # the daily transfer limit's total
+        return Decimal("0")
+
     async def execute(self, sql, *args):
         assert sql.strip().startswith("INSERT INTO transactions")
         tid, frm, to, amount, desc, otp_hash, expires, idem, by, user = args

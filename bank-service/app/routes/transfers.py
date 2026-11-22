@@ -130,6 +130,10 @@ async def initiate_transfer(body: TransferInitiateRequest):
                 idempotent_replay=True,
             )
 
+    # --- person-to-person limits (policies/transfer-limits.md) ---
+    if to_row["user_id"] != body.user_id:
+        await _check_limits(pool, body.user_id, Decimal(body.amount))
+
     # --- generate OTP ---
     otp_code = otp_svc.generate_otp()
     otp_hash = await asyncio.to_thread(otp_svc.hash_otp, otp_code)
@@ -188,6 +192,33 @@ async def initiate_transfer(body: TransferInitiateRequest):
         to_account=body.to_account,
         expires_at=expires_at,
     )
+
+
+async def _check_limits(pool, user_id: str, amount: Decimal) -> None:
+    """$5,000 per transfer and $10,000 per UTC day to other people. The day's
+    total counts confirmed transfers and pending ones still inside their OTP
+    window; declined, cancelled, expired and merchant payments don't count."""
+    if amount > config.LIMIT_PER_TRANSFER:
+        raise BankError(422, "LIMIT_PER_TRANSFER",
+                        f"Transfers to other people are limited to ${config.LIMIT_PER_TRANSFER:,.2f} each.",
+                        {"amount": float(amount), "limit": float(config.LIMIT_PER_TRANSFER)})
+    now = datetime.now(timezone.utc)
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    used = await pool.fetchval(
+        """
+        SELECT COALESCE(SUM(t.amount), 0)
+        FROM transactions t JOIN accounts a_to ON a_to.id = t.to_account
+        WHERE t.user_id = $1 AND a_to.user_id <> $1 AND t.merchant_id IS NULL
+          AND t.created_at >= $2
+          AND (t.status = 'confirmed' OR (t.status = 'pending_otp' AND t.otp_expires_at > $3))
+        """,
+        user_id, day_start, now,
+    )
+    if used + amount > config.LIMIT_DAILY:
+        raise BankError(422, "LIMIT_DAILY",
+                        f"Transfers to other people are limited to ${config.LIMIT_DAILY:,.2f} per day (UTC); "
+                        f"${used:,.2f} is already used today.",
+                        {"amount": float(amount), "used_today": float(used), "limit": float(config.LIMIT_DAILY)})
 
 
 @router.post("/{transfer_id}/confirm", response_model=TransferConfirmResponse)

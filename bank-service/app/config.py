@@ -21,5 +21,10 @@ CORS_ORIGINS = [
     if origin.strip()
 ]
 
+# Person-to-person transfer limits (policies/transfer-limits.md). Transfers
+# between a customer's own accounts and merchant payments aren't limited here.
+LIMIT_PER_TRANSFER = Decimal("5000.00")
+LIMIT_DAILY = Decimal("10000.00")  # per UTC calendar day, confirmed + live pending
+
 # Balances restored by POST /accounts/reset. Must match seed_demo_user() in db/init.sql.
 SEED_BALANCES = {"checking": Decimal("10000.00"), "savings": Decimal("5000.00")}

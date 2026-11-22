@@ -12,7 +12,7 @@ Moving money between your own checking and savings accounts is limited only by t
 
 ## Transfers to other people
 
-Transfers to another person's account, including any account in the Ironclad directory, are limited to $5,000.00 per transfer and $10,000.00 in total per calendar day (midnight to midnight, UTC). A transfer that would go over either limit should be split or sent on another day.
+Transfers to another person's account, including any account in the Ironclad directory, are limited to $5,000.00 per transfer and $10,000.00 in total per calendar day (midnight to midnight, UTC). Pending transfers count toward the day's total until they are approved, declined, cancelled or expire. A transfer that would go over either limit is refused (LIMIT_PER_TRANSFER or LIMIT_DAILY); split it or send it on another day.
 
 ## Merchant payments
 
