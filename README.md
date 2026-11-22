@@ -10,6 +10,12 @@ Fictional bank application — PostgreSQL + FastAPI + React, all running locally
 docker compose up --build
 ```
 
+The database image is `pgvector/pgvector:pg18`. A `pgdata` volume created by the
+older Postgres 16 image won't start under 18: remove it (`docker compose down -v`,
+which deletes its data) and let the init scripts recreate it. Then run
+`docker compose exec bank-service python -m app.cli index-policies` with
+`OPENAI_API_KEY` set to fill the policy index.
+
 Then open **http://localhost:3000**.
 
 - **Dashboard**: view accounts and recent transactions
@@ -45,11 +51,15 @@ Browser → nginx (port 3000)
 ## Development (without Docker)
 
 ```bash
-# 1. Start Postgres (or use docker compose up db)
+# 1. Start Postgres 18 with pgvector (or use docker compose up db), e.g.
+#      brew install postgresql@18 pgvector && brew services start postgresql@18
+#    and enable the extension once, as a superuser:
+#      psql -d anvil_bank -c "CREATE EXTENSION IF NOT EXISTS vector;"
 # 2. Bank service
 cd bank-service
 pip install -r requirements.txt
-python -m app.cli migrate            # existing database: add the merchants schema (idempotent)
+python -m app.cli migrate            # existing database: add the merchants and policy schema (idempotent)
+OPENAI_API_KEY=sk-... python -m app.cli index-policies   # embed bank-service/policies/*.md
 uvicorn app.main:app --port 8001 --reload
 # tests: the payments tests need a Postgres they can create schemas in
 TEST_DATABASE_URL=postgresql://anvil:devpassword@localhost:5432/anvil_bank pytest -q tests
@@ -83,6 +93,7 @@ npm run dev
 | POST | `/payments/requests` | Merchant payment request (merchant key) |
 | GET | `/payments/requests/{id}` | A merchant's own payment request (merchant key) |
 | POST | `/payments/requests/{id}/cancel` | Withdraw a merchant's own pending request (merchant key) |
+| GET | `/policies/search?q=&top_k=` | Search the bank's policy documents (read-only) |
 | WS | `/ws/{user_id}` | Real-time notifications |
 
 ## Merchant payments
@@ -149,7 +160,56 @@ OTP modal for it closes. Cancelling an already cancelled or expired request
 returns it unchanged; a confirmed one is 409 `PAYMENT_ALREADY_CONFIRMED`.
 There's no refund API.
 
+## Policy search (RAG)
+
+`bank-service/policies/*.md` are Ironclad's (fictional) policies: fees,
+transfer limits, OTP security, merchant payments, disputes, fraud and
+freezes, savings interest, privacy, support, and AI agents. They're chunked
+by `##` section (long sections split at about 60 tokens with a little
+overlap; every chunk keeps its document, section and effective date),
+embedded with `text-embedding-3-small`, and stored in Ironclad's own Postgres
+with pgvector (`policy_chunks`, `db/003_policies.sql`, HNSW cosine index).
+
+- `python -m app.cli index-policies` embeds new or changed chunks only
+  (content hash), deletes chunks whose section is gone, and prints counts and
+  the embedding cost. Indexing all 10 documents (74 chunks) takes about
+  3,000 tokens, under $0.0001.
+- `GET /policies/search?q=...&top_k=3` (`q` 3–300 characters, `top_k` 1–5)
+  returns `doc_title`, `section`, `effective_date`, `content` and `score`
+  (cosine similarity). Results under the minimum score (0.43,
+  `POLICY_MIN_SCORE`) are dropped, so a question no policy covers returns an
+  empty list. Needs `OPENAI_API_KEY` to embed the query.
+- The banking agent has a `search_policies` tool (trusted: the bank writes
+  the documents; schema-checked by Anvil) and answers policy questions only
+  from its results, citing document and section, or says the policies don't
+  cover it. Nothing outside Ironclad can call it yet.
+
+**Retrieval eval** (`bank-service/evals/policies/`, `python -m evals.policies.run`):
+25 questions written before any search ran: 8 direct, 9 paraphrased with
+little word overlap ("how long do I have to type the code?"), 3 spanning two
+documents, 5 the policies don't answer. Tuned only chunk size and minimum
+score:
+
+| Chunk size | Min score | Recall@1 | Recall@3 | MRR@3 | Answerable came back empty | Unanswerable came back empty |
+|---|---|---|---|---|---|---|
+| whole sections (400) | 0.35 | 0.80 | 0.85 | 0.87 | 0.00 | 0.40 |
+| whole sections (400) | 0.43 | 0.75 | 0.80 | 0.82 | 0.05 | 1.00 |
+| 120 | 0.40 | 0.80 | 0.85 | 0.87 | 0.00 | 0.60 |
+| **60 (chosen)** | **0.43** | **0.80** | **0.90** | **0.90** | **0.00** | **1.00** |
+| 60 | 0.44 | 0.75 | 0.80 | 0.82 | 0.05 | 1.00 |
+
+The two misses at 3 are questions spanning two documents, where top 3 holds
+one of the two sections; the agent is told to search once per topic. The
+threshold sits on a thin margin: the weakest correct answer scored 0.434,
+the strongest unanswerable question 0.428 ("Which ATMs can I use without a
+fee?" vs "Monthly fees"). 25 questions on one embedding model, with no
+held-out set: treat it as a regression check. A full grid run costs about
+$0.0002. Full grid: `evals/policies/results/summary.md`.
+
 ## Known limitations
+- The transfer limits in `policies/transfer-limits.md` ($5,000 per transfer
+  and $10,000 per day to other people) aren't enforced by the bank service
+  yet; only the balance is.
 - `POST /accounts/reset` resets the user's own balances and deletes their
   transactions, including merchant payments, but doesn't touch merchants'
   settlement account balances.
