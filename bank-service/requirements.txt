@@ -4,3 +4,4 @@ asyncpg==0.30.*
 bcrypt==4.2.*
 pydantic==2.*
 python-dotenv==1.*
+httpx==0.28.*

@@ -1,6 +1,7 @@
 """Shared fixtures. Tests that need Postgres use the `bank` fixture: a fresh
-schema (db/init.sql + db/002_merchants.sql) inside TEST_DATABASE_URL, dropped
-afterwards. Without TEST_DATABASE_URL those tests are skipped."""
+schema (db/init.sql, 002_merchants.sql, 003_policies.sql) inside
+TEST_DATABASE_URL, dropped afterwards. Without TEST_DATABASE_URL those tests
+are skipped. The database needs pgvector; the extension lives in public."""
 
 from __future__ import annotations
 
@@ -33,12 +34,14 @@ async def bank(monkeypatch):
 
     schema = "test_" + uuid.uuid4().hex[:10]
     admin = await asyncpg.connect(TEST_DATABASE_URL)
+    # Needs a superuser the first time (CI's user is one; locally, see db/003_policies.sql).
+    await admin.execute("CREATE EXTENSION IF NOT EXISTS vector SCHEMA public")
     await admin.execute(f"CREATE SCHEMA {schema}")
-    await admin.execute(f"SET search_path TO {schema}")
-    await admin.execute((DB_DIR / "init.sql").read_text())
-    await admin.execute((DB_DIR / "002_merchants.sql").read_text())
+    await admin.execute(f"SET search_path TO {schema}, public")
+    for name in ("init.sql", "002_merchants.sql", "003_policies.sql"):
+        await admin.execute((DB_DIR / name).read_text())
     pool = await asyncpg.create_pool(TEST_DATABASE_URL, min_size=1, max_size=4,
-                                     server_settings={"search_path": schema})
+                                     server_settings={"search_path": f"{schema},public"})
     monkeypatch.setattr(app_db, "_pool", pool)
 
     pushed: list[tuple[str, dict]] = []
