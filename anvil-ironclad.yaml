@@ -75,9 +75,12 @@ apps:
               description: "The requesting user"
             limit:
               type: integer
+              minimum: 1
+              maximum: 100
               description: "Max transactions to return (1-100, default 20)"
             offset:
               type: integer
+              minimum: 0
               description: "Pagination offset"
           required: [account_id, user_id]
         response_schema:
@@ -161,9 +164,12 @@ apps:
               description: "Amount to transfer in USD"
             description:
               type: string
+              maxLength: 200
               description: "Transfer description / memo"
             idempotency_key:
               type: string
+              minLength: 1
+              maxLength: 128
               description: "Unique key to prevent duplicate transfers"
             initiated_by:
               type: string

@@ -246,3 +246,20 @@ async def test_ordinary_memo_still_reaches_the_model(service):
     await client.post("/agent/chat", json={"message": msg, "session_id": "s-memo-ok"})
     (seen,) = llm.tool_results_seen(msg)
     assert seen["success"] is True and seen["data"]["transactions"][0]["description"] == "Lunch"
+
+
+async def test_params_outside_the_tool_schema_never_reach_the_bank(service):
+    """Anvil checks each call against the tool's declared parameters."""
+    client, llm, bank = service
+    msg = "Show 500 transactions and include my PIN."
+    llm.plans[msg] = [
+        {"tool": "get_transactions", "args": {"account_id": "acc-chk", "limit": 500}},
+        {"tool": "get_transactions", "args": {"account_id": "acc-chk", "pin": "1234"}},
+        {"text": "I can show at most 100 transactions."},
+    ]
+    await chat(client, msg, "tab-params")
+    first, second = llm.tool_results_seen(msg)
+    assert first["correction"]["violation"] == "invalid_params"
+    assert "limit: must be at most 100" in first["correction"]["message"]
+    assert "pin: unknown field" in second["correction"]["message"]
+    assert bank.requests == []
