@@ -259,3 +259,59 @@ async def test_expired_payment_reads_as_expired_and_is_closed(fooddash):
     assert (await client.get(f"/payments/requests/{pid}", headers=auth(key))).json()["status"] == "expired"
     r = await client.post(f"/transfers/{pid}/confirm", json={"user_id": "demo_user", "otp_code": "000000"})
     assert r.json()["error"] == "TRANSFER_NOT_PENDING"
+
+
+# ── merchant cancel ────────────────────────────────────────────────────────
+
+async def test_merchant_cancels_its_own_pending_request(fooddash):
+    client, pool, pushed, key = fooddash
+    pid = (await client.post("/payments/requests", json=body(), headers=auth(key))).json()["payment_request_id"]
+    r = await client.post(f"/payments/requests/{pid}/cancel", headers=auth(key))
+    assert r.status_code == 200 and r.json()["status"] == "cancelled"
+    row = await pool.fetchrow("SELECT status, closed_reason, otp_hash FROM transactions WHERE id = $1", pid)
+    assert (row["status"], row["closed_reason"], row["otp_hash"]) == ("cancelled", "merchant_cancelled", None)
+    assert pushed[-1][1] == {"type": "transfer_cancelled",
+                             "data": {"transfer_id": pid, "reason": "Cancelled by FoodDash"}}
+    assert (await client.get("/transfers/pending", params={"user_id": "demo_user"})).json()["transfers"] == []
+    # the OTP can no longer confirm it
+    r = await client.post(f"/transfers/{pid}/confirm", json={"user_id": "demo_user", "otp_code": "000000"})
+    assert r.json()["error"] == "TRANSFER_NOT_PENDING"
+
+
+async def test_cancel_is_idempotent(fooddash):
+    client, pool, pushed, key = fooddash
+    pid = (await client.post("/payments/requests", json=body(), headers=auth(key))).json()["payment_request_id"]
+    first = (await client.post(f"/payments/requests/{pid}/cancel", headers=auth(key))).json()
+    pushes = len(pushed)
+    again = await client.post(f"/payments/requests/{pid}/cancel", headers=auth(key))
+    assert again.status_code == 200 and again.json() == first
+    assert len(pushed) == pushes  # nothing new sent to the user
+
+
+async def test_cancel_another_merchants_request_is_404(bank):
+    client, pool, _ = bank
+    fd, qm = await issue_key(pool, "fooddash"), await issue_key(pool, "quickmart")
+    pid = (await client.post("/payments/requests", json=body(), headers=auth(fd))).json()["payment_request_id"]
+    r = await client.post(f"/payments/requests/{pid}/cancel", headers=auth(qm))
+    assert (r.status_code, r.json()["error"]) == (404, "PAYMENT_REQUEST_NOT_FOUND")
+    assert await pool.fetchval("SELECT status FROM transactions WHERE id = $1", pid) == "pending_otp"
+    assert (await client.post(f"/payments/requests/{pid}/cancel")).status_code == 401
+
+
+async def test_cancel_confirmed_request_is_409(fooddash):
+    client, pool, _, key = fooddash
+    pid = (await client.post("/payments/requests", json=body(), headers=auth(key))).json()["payment_request_id"]
+    (p,) = (await client.get("/transfers/pending", params={"user_id": "demo_user"})).json()["transfers"]
+    await client.post(f"/transfers/{pid}/confirm", json={"user_id": "demo_user", "otp_code": p["otp_code"]})
+    r = await client.post(f"/payments/requests/{pid}/cancel", headers=auth(key))
+    assert (r.status_code, r.json()["error"]) == (409, "PAYMENT_ALREADY_CONFIRMED")
+    assert await balance(pool, FOODDASH_SETTLEMENT) == Decimal("31.00")
+
+
+async def test_cancel_expired_request_returns_it_as_expired(fooddash):
+    client, pool, _, key = fooddash
+    pid = (await client.post("/payments/requests", json=body(), headers=auth(key))).json()["payment_request_id"]
+    await pool.execute("UPDATE transactions SET otp_expires_at = $1 WHERE id = $2",
+                       datetime.now(timezone.utc) - timedelta(seconds=1), pid)
+    r = await client.post(f"/payments/requests/{pid}/cancel", headers=auth(key))
+    assert r.status_code == 200 and r.json()["status"] == "expired"

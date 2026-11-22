@@ -88,6 +88,11 @@ export function BankProvider({ children }: { children: ReactNode }) {
               break;
             case 'transfer_cancelled':
               addToast(`Transfer cancelled: ${event.data.reason}`, 'error');
+              // Close the OTP modal if it's for this transfer (expired, or
+              // withdrawn by the merchant that requested it).
+              setOtpEvent((current) =>
+                current && current.transfer_id === event.data.transfer_id ? null : current,
+              );
               break;
             case 'balance_updated':
               refreshAccounts();

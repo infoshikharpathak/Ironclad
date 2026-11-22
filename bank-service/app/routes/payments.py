@@ -5,8 +5,9 @@ is that merchant's settlement account from the registry. Neither ever comes
 from the request body. The payment is a pending transfer on the existing
 OTP flow, so no money moves until the user types the OTP in Ironclad.
 
-    POST /payments/requests        Authorization: Bearer mk_...
-    GET  /payments/requests/{id}   (the merchant's own requests only)
+    POST /payments/requests              Authorization: Bearer mk_...
+    GET  /payments/requests/{id}         (the merchant's own requests only)
+    POST /payments/requests/{id}/cancel  (withdraw a pending request)
 """
 
 from __future__ import annotations
@@ -91,7 +92,8 @@ def _status(row) -> str:
         return "expired" if expired else "pending_otp"
     if row["closed_reason"] == "expired":
         return "expired"
-    return "cancelled"  # declined, too many OTP attempts, or failed at confirm (insufficient funds)
+    # declined, merchant_cancelled, too many OTP attempts, or failed at confirm (insufficient funds)
+    return "cancelled"
 
 
 def _out(row, merchant, *, replay: bool = False) -> PaymentRequestOut:
@@ -244,3 +246,43 @@ async def get_payment_request(payment_request_id: str, authorization: str | None
     if row is None:  # another merchant's request looks exactly like a missing one
         raise BankError(404, "PAYMENT_REQUEST_NOT_FOUND", f"Payment request {payment_request_id} not found.")
     return _out(await _expire_if_due(row), merchant)
+
+
+@router.post("/requests/{payment_request_id}/cancel", response_model=PaymentRequestOut)
+async def cancel_payment_request(payment_request_id: str, authorization: str | None = Header(default=None)):
+    """The merchant withdraws its own pending request (e.g. the order was
+    cancelled). Idempotent: an already cancelled or expired request is
+    returned as it is. A confirmed one can't be cancelled (409): the money
+    has moved."""
+    merchant = await _merchant(authorization)
+    pool = get_pool()
+    row = await pool.fetchrow(
+        "SELECT * FROM transactions WHERE id = $1 AND merchant_id = $2", payment_request_id, merchant["merchant_id"]
+    )
+    if row is None:
+        raise BankError(404, "PAYMENT_REQUEST_NOT_FOUND", f"Payment request {payment_request_id} not found.")
+    row = await _expire_if_due(row)
+    if row["status"] == "confirmed":
+        raise BankError(409, "PAYMENT_ALREADY_CONFIRMED",
+                        "This payment was already confirmed by the user; it can't be cancelled.",
+                        {"payment_request_id": payment_request_id})
+    if row["status"] != "pending_otp":
+        return _out(row, merchant)  # already cancelled, expired or failed: nothing to do
+
+    updated = await pool.fetchrow(
+        "UPDATE transactions SET status = 'cancelled', closed_reason = 'merchant_cancelled', otp_hash = NULL "
+        "WHERE id = $1 AND status = 'pending_otp' RETURNING *",
+        payment_request_id,
+    )
+    if updated is None:  # the user confirmed or declined it in the meantime
+        current = await pool.fetchrow("SELECT * FROM transactions WHERE id = $1", payment_request_id)
+        if current["status"] == "confirmed":
+            raise BankError(409, "PAYMENT_ALREADY_CONFIRMED",
+                            "This payment was already confirmed by the user; it can't be cancelled.",
+                            {"payment_request_id": payment_request_id})
+        return _out(current, merchant)
+    await manager.send_to_user(row["user_id"], {
+        "type": "transfer_cancelled",
+        "data": {"transfer_id": payment_request_id, "reason": f"Cancelled by {merchant['display_name']}"},
+    })
+    return _out(updated, merchant)
