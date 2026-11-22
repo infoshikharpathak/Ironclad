@@ -110,11 +110,15 @@ async def test_over_the_limit_is_422(fooddash):
     assert (await client.post("/payments/requests", json=body(amount=200), headers=auth(key))).status_code == 200
 
 
-async def test_insufficient_funds_is_422(fooddash):
+async def test_insufficient_funds_is_422_and_reveals_no_balance(fooddash):
     client, pool, _, key = fooddash
-    await pool.execute("UPDATE accounts SET balance = 10 WHERE id = $1", PAYER)
+    await pool.execute("UPDATE accounts SET balance = 12.34 WHERE id = $1", PAYER)
     r = await client.post("/payments/requests", json=body(amount=31), headers=auth(key))
     assert (r.status_code, r.json()["error"]) == (422, "INSUFFICIENT_FUNDS")
+    assert r.json()["details"] == {}
+    text = r.text.lower()
+    for leak in ("12.34", "balance", PAYER, "checking"):
+        assert leak not in text, leak
 
 
 async def test_unknown_payer_is_404(fooddash):

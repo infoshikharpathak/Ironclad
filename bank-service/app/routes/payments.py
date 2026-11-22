@@ -183,9 +183,9 @@ async def create_payment_request(request: Request, authorization: str | None = H
     if payee_row is None:  # registry misconfiguration, not the caller's fault
         raise BankError(500, "SETTLEMENT_ACCOUNT_MISSING", "The merchant's settlement account doesn't exist.")
     if payer["balance"] < body.amount:
-        raise BankError(422, "INSUFFICIENT_FUNDS",
-                        f"{payer['name']} balance (${payer['balance']}) is less than the payment (${body.amount}).",
-                        {"balance": float(payer["balance"]), "amount": float(body.amount)})
+        # The merchant learns only that the payer can't cover it: never the
+        # balance, the account or by how much (policies/privacy-and-data-use.md).
+        raise BankError(422, "INSUFFICIENT_FUNDS", "The customer's account can't cover this payment.")
 
     otp_code = otp_svc.generate_otp()
     otp_hash = await asyncio.to_thread(otp_svc.hash_otp, otp_code)

@@ -12,7 +12,7 @@ Your balance and transaction history are visible only to you and to services you
 
 ## Merchants
 
-When you pay a merchant, Ironclad tells the merchant whether its payment request is pending, confirmed, cancelled or expired, and, if a request is refused, the reason (for example that the balance was too low). Merchants never receive your other transactions or your one-time passcode.
+When you pay a merchant, Ironclad tells the merchant only whether its payment request is pending, confirmed, cancelled or expired, or that it was refused. Merchants never receive your balance, your account details, your other transactions or your one-time passcode.
 
 ## AI assistants
 
