@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from . import config
 from .db import init_pool, close_pool
 from .errors import BankError
-from .routes import health, accounts, transfers, directory
+from .routes import health, accounts, transfers, directory, payments
 from .ws.notifications import router as ws_router
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(name)s  %(message)s")
@@ -51,4 +51,5 @@ app.include_router(health.router)
 app.include_router(accounts.router)
 app.include_router(transfers.router)
 app.include_router(directory.router)
+app.include_router(payments.router)
 app.include_router(ws_router)

@@ -32,10 +32,12 @@ async def list_pending_transfers(user_id: str = Query(min_length=1)):
     rows = await pool.fetch(
         """
         SELECT t.*, a_from.name AS from_name,
-               COALESCE(a_to.owner_name, a_to.name) AS to_name
+               COALESCE(m.display_name, a_to.owner_name, a_to.name) AS to_name,
+               m.display_name AS merchant_display_name
         FROM transactions t
         JOIN accounts a_from ON a_from.id = t.from_account
         JOIN accounts a_to   ON a_to.id   = t.to_account
+        LEFT JOIN merchants m ON m.merchant_id = t.merchant_id
         WHERE t.user_id = $1 AND t.status = 'pending_otp'
         ORDER BY t.created_at DESC
         """,
@@ -47,7 +49,8 @@ async def list_pending_transfers(user_id: str = Query(min_length=1)):
     for row in rows:
         if row["otp_expires_at"] and now > row["otp_expires_at"]:
             await pool.execute(
-                "UPDATE transactions SET status = 'cancelled' WHERE id = $1", row["id"]
+                "UPDATE transactions SET status = 'cancelled', closed_reason = 'expired' WHERE id = $1",
+                row["id"],
             )
             continue
 
@@ -67,6 +70,11 @@ async def list_pending_transfers(user_id: str = Query(min_length=1)):
             "to_name": row["to_name"],
             "description": row["description"] or "",
             "initiated_by": row["initiated_by"],
+            # Set for merchant payment requests (see routes/payments.py).
+            "merchant_id": row["merchant_id"],
+            "merchant_display_name": row["merchant_display_name"],
+            "order_ref": row["order_ref"],
+            "channel": row["channel"],
             "otp_code": otp_code,
             "expires_at": row["otp_expires_at"].isoformat() if row["otp_expires_at"] else None,
             "created_at": row["created_at"].isoformat(),
@@ -201,7 +209,8 @@ async def confirm_transfer(transfer_id: str, body: TransferConfirmRequest):
         # Expiry
         if txn["otp_expires_at"] and datetime.now(timezone.utc) > txn["otp_expires_at"]:
             await conn.execute(
-                "UPDATE transactions SET status = 'cancelled' WHERE id = $1", transfer_id
+                "UPDATE transactions SET status = 'cancelled', closed_reason = 'expired' WHERE id = $1",
+                transfer_id,
             )
             await manager.send_to_user(
                 body.user_id,
@@ -220,7 +229,9 @@ async def confirm_transfer(transfer_id: str, body: TransferConfirmRequest):
         if not valid:
             if attempts >= config.OTP_MAX_ATTEMPTS:
                 await conn.execute(
-                    "UPDATE transactions SET status = 'cancelled' WHERE id = $1", transfer_id
+                    "UPDATE transactions SET status = 'cancelled', closed_reason = 'otp_max_attempts' "
+                    "WHERE id = $1",
+                    transfer_id,
                 )
                 await manager.send_to_user(
                     body.user_id,
@@ -311,7 +322,7 @@ async def cancel_transfer(transfer_id: str, body: CancelRequest):
         raise BankError(422, "TRANSFER_NOT_PENDING", f"Transfer is {row['status']}, not pending_otp")
 
     await pool.execute(
-        "UPDATE transactions SET status = 'cancelled' WHERE id = $1", transfer_id
+        "UPDATE transactions SET status = 'cancelled', closed_reason = 'declined' WHERE id = $1", transfer_id
     )
     await manager.send_to_user(
         body.user_id,

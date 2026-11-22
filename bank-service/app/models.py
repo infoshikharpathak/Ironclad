@@ -59,6 +59,10 @@ class Transaction(BaseModel):
     otp_expires_at: datetime | None
     created_at: datetime
     confirmed_at: datetime | None
+    # Merchant payment requests only (routes/payments.py).
+    merchant_id: str | None = None
+    order_ref: str | None = None
+    channel: str | None = None
 
 
 class TransactionsResponse(BaseModel):
@@ -142,4 +146,7 @@ def transaction_from_row(row) -> Transaction:
         otp_expires_at=row["otp_expires_at"],
         created_at=row["created_at"],
         confirmed_at=row["confirmed_at"],
+        merchant_id=row.get("merchant_id"),
+        order_ref=row.get("order_ref"),
+        channel=row.get("channel"),
     )

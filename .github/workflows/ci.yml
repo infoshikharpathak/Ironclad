@@ -36,6 +36,18 @@ jobs:
 
   bank-service:
     runs-on: ubuntu-latest
+    services:
+      # The payments tests run on real Postgres, each in a throwaway schema.
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: anvil
+          POSTGRES_PASSWORD: devpassword
+          POSTGRES_DB: anvil_bank_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U anvil -d anvil_bank_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     defaults:
       run:
         working-directory: bank-service
@@ -49,4 +61,6 @@ jobs:
       - name: Install
         run: pip install -r requirements.txt pytest httpx
       - name: Test
+        env:
+          TEST_DATABASE_URL: postgresql://anvil:devpassword@localhost:5432/anvil_bank_test
         run: pytest -q tests
