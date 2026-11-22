@@ -1,7 +1,8 @@
-"""GET /policies/search: Ironclad's policy documents, by meaning.
+"""GET /policies/search: Ironclad's policy documents.
 
-Read-only. Returns the chunks closest to the question, above a minimum
-cosine similarity; nothing at all if no policy covers it."""
+Read-only. Hybrid search (vector + full-text over small chunks, fused),
+returning each matching ## section once; nothing at all if no policy
+covers the question (see app/policies/store.py)."""
 
 from __future__ import annotations
 
@@ -30,4 +31,4 @@ async def search_policies(
         results, _ = await store.search(get_pool(), embedder, q.strip(), top_k)
     except embeddings.EmbeddingError as exc:
         raise BankError(503, "POLICY_SEARCH_UNAVAILABLE", f"Policy search is unavailable: {exc}") from exc
-    return {"query": q, "results": results, "min_score": store.min_score()}
+    return {"query": q, "results": results}

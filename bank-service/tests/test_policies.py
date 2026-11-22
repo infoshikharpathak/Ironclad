@@ -94,20 +94,21 @@ async def test_search_returns_sections_with_metadata(indexed):
     assert len(body["results"]) <= 3
 
 
-async def test_nothing_above_the_minimum_score_is_an_empty_list(indexed, monkeypatch):
+async def test_not_covered_is_an_empty_list(indexed, monkeypatch):
     r = await indexed.get("/policies/search", params={"q": "mortgage rates for a holiday home abroad"})
     assert r.json()["results"] == []
-    monkeypatch.setenv("POLICY_MIN_SCORE", "0.99")
+    monkeypatch.setenv("POLICY_VECTOR_GATE", "0.99")
+    monkeypatch.setenv("POLICY_KEYWORD_GATE", "99")
     r = await indexed.get("/policies/search", params={"q": "how many attempts to enter the correct passcode"})
-    assert r.json()["results"] == [] and r.json()["min_score"] == 0.99
+    assert r.json()["results"] == []
 
 
 async def test_top_k_limits_results(indexed, monkeypatch):
-    monkeypatch.setenv("POLICY_MIN_SCORE", "0")
+    monkeypatch.setenv("POLICY_VECTOR_GATE", "0")
     r = await indexed.get("/policies/search", params={"q": "passcode transfer savings", "top_k": 1})
     assert len(r.json()["results"]) == 1
     r = await indexed.get("/policies/search", params={"q": "passcode transfer savings", "top_k": 5})
-    assert len(r.json()["results"]) == 3  # only 3 chunks exist
+    assert len(r.json()["results"]) == 3  # only 3 sections exist
 
 
 @pytest.mark.parametrize("params", [{"q": "hi"}, {"q": "x" * 301}, {}, {"q": "valid query", "top_k": 0},
@@ -121,3 +122,69 @@ async def test_search_without_an_embedder_is_503(bank, monkeypatch):
     monkeypatch.setattr(policies_route, "get_embedder", lambda: None)
     r = await client.get("/policies/search", params={"q": "valid query"})
     assert (r.status_code, r.json()["error"]) == (503, "POLICY_SEARCH_UNAVAILABLE")
+
+
+
+# ── hybrid parent-child ────────────────────────────────────────────────────
+
+LONG = {"limits": """# Transfer Limits
+
+Effective date: 2026-10-01
+
+## Transfers to other people
+
+Transfers to other people are limited to $5,000 per transfer. The daily total for transfers to other people is $10,000. Transfers to other people need an OTP.
+
+## Savings
+
+Savings earns interest monthly.
+"""}
+
+
+async def index_small(pool, docs, max_tokens=12):
+    out = []
+    for slug, text in docs.items():
+        out += chunking.parse_document(slug, text, max_tokens=max_tokens, overlap_tokens=2)
+    async with pool.acquire() as conn:
+        await store.index_chunks(conn, out, embeddings.FakeEmbedder())
+    return out
+
+
+async def test_parent_section_is_returned_once_with_its_whole_text(bank, monkeypatch):
+    client, pool, _ = bank
+    chunks = await index_small(pool, LONG)
+    children = [c for c in chunks if c.section == "Transfers to other people"]
+    assert len(children) >= 3  # several children share one parent
+    monkeypatch.setattr(policies_route, "get_embedder", lambda: embeddings.FakeEmbedder())
+    monkeypatch.setenv("POLICY_VECTOR_GATE", "0")
+    r = await client.get("/policies/search", params={"q": "transfers to other people limit per transfer daily total"})
+    results = r.json()["results"]
+    assert [x["section"] for x in results].count("Transfers to other people") == 1
+    top = results[0]
+    assert top["section"] == "Transfers to other people" and "$5,000" in top["content"] and "$10,000" in top["content"]
+    assert top["content"] == children[0].section_content  # the parent, not a child
+    sections = await pool.fetch("SELECT id FROM policy_sections ORDER BY id")
+    assert [s["id"] for s in sections] == ["limits:savings", "limits:transfers-to-other-people"]
+
+
+async def test_keyword_search_finds_exact_terms(bank):
+    _, pool, _ = bank
+    await index_small(pool, LONG)
+    rows = await store.keyword_children(pool, "What is the OTP rule?")
+    assert rows and rows[0]["section"] == "Transfers to other people" and "OTP" in rows[0]["content"]
+    assert await store.keyword_children(pool, "the and of") == []  # only stop words: no query
+
+
+async def test_reindex_drops_parents_whose_section_is_gone(bank):
+    _, pool, _ = bank
+    await index_small(pool, LONG)
+    await index_small(pool, {"limits": LONG["limits"].split("## Savings")[0]})
+    assert [r["id"] for r in await pool.fetch("SELECT id FROM policy_sections")] == ["limits:transfers-to-other-people"]
+
+
+def test_fusion_ranks_by_weighted_reciprocal_rank():
+    a = {"id": "a", "parent_id": "p", "score": 0.9}
+    b = {"id": "b", "parent_id": "q", "score": 0.8}
+    fused = store.fuse([a, b], [{**b, "score": 1.0}], k=5, keyword_weight=0.25)
+    assert [r["id"] for r in fused] == ["b", "a"]  # b: 1/7 + 0.25/6 > a: 1/6
+    assert fused[0]["vector_score"] == 0.8 and fused[0]["keyword_score"] == 1.0

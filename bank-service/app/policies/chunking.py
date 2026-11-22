@@ -31,10 +31,19 @@ class Chunk:
     chunk_index: int
     effective_date: date | None
     content: str
+    section_content: str = ""  # the whole ## section this chunk belongs to (its parent)
 
     @property
     def id(self) -> str:
-        return f"{self.doc_slug}:{slugify(self.section)}:{self.chunk_index}"
+        return f"{self.parent_id}:{self.chunk_index}"
+
+    @property
+    def parent_id(self) -> str:
+        return f"{self.doc_slug}:{slugify(self.section)}"
+
+    def section_hash(self) -> str:
+        return hashlib.sha256(
+            f"{self.doc_title}\n{self.section}\n{self.effective_date}\n{self.section_content}".encode()).hexdigest()
 
     def embedding_text(self) -> str:
         """What gets embedded: the title and section give the content context."""
@@ -64,7 +73,7 @@ def parse_document(slug: str, markdown: str, *, max_tokens: int = DEFAULT_MAX_TO
     chunks: list[Chunk] = []
     for section, body in _sections(markdown):
         for i, piece in enumerate(split_text(body, max_tokens, overlap_tokens)):
-            chunks.append(Chunk(slug, title, section, i, effective, piece))
+            chunks.append(Chunk(slug, title, section, i, effective, piece, body))
     return chunks
 
 
