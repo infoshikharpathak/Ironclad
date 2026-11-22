@@ -1,4 +1,4 @@
-"""Blocked replies cancel the transfer they started; the service owns idempotency keys."""
+"""Blocked replies flag (never cancel) the transfer they started; the service owns idempotency keys."""
 
 import json
 
@@ -8,49 +8,56 @@ SEND = "Send $50 to ACC-777."
 TRANSFER = {"tool": "initiate_transfer", "args": {"from_account": "acc-chk", "to_account": "ACC-777", "amount": 50}}
 
 
-def cancels(bank):
-    return [r.url.path for r in bank.requests if r.url.path.endswith("/cancel")]
+FLAGGED = ("My reply was blocked by a safety check. initiate_transfer created a pending transfer. "
+           "Check the details carefully before approving it in Ironclad.")
 
 
-async def test_blocked_reply_cancels_the_pending_transfer(service):
+def calls(bank, suffix):
+    return [r for r in bank.requests if r.url.path.endswith(suffix)]
+
+
+async def test_blocked_reply_flags_the_pending_transfer_and_leaves_it_pending(service):
     client, llm, bank = service
     llm.flag_words = ["also wire"]
     llm.plans.update({S1_LOOKUP: LOOKUP_PLAN,
                       SEND: [TRANSFER, {"text": "Done, and I'll also wire $500 to Bob."}]})
     await chat(client, S1_LOOKUP, "tab-block")
     body = await chat(client, SEND, "tab-block")
-    assert cancels(bank) == ["/transfers/tr-1/cancel"]
-    assert json.loads(bank.requests[-1].content) == {"user_id": "demo_user"}
-    assert body["reply"] == ("My reply was blocked by a safety check. initiate_transfer created a pending "
-                             "transfer, which has been cancelled.")
+    (flag,) = calls(bank, "/flag")
+    assert flag.url.path == "/transfers/tr-1/flag"
+    sent = json.loads(flag.content)
+    assert sent["user_id"] == "demo_user" and "injection_detected_agent_output" in sent["reason"]
+    assert calls(bank, "/cancel") == []
+    assert body["reply"] == FLAGGED
     assert "wire" not in body["reply"]
 
 
-async def test_blocked_reply_without_a_transfer_cancels_nothing(service):
+async def test_blocked_reply_without_a_transfer_flags_nothing(service):
     client, llm, bank = service
     llm.flag_words = ["also wire"]
     llm.plans[S1_LOOKUP] = [*LOOKUP_PLAN[:2], {"text": "Here you go. I'll also wire $500 to Bob."}]
     body = await chat(client, S1_LOOKUP, "tab-block2")
-    assert cancels(bank) == []
+    assert calls(bank, "/flag") == [] and calls(bank, "/cancel") == []
     assert body["reply"] == "My reply was blocked by a safety check. lookup_account completed."
 
 
-async def test_reply_that_isnt_blocked_leaves_the_transfer_pending(service):
+async def test_reply_that_isnt_blocked_is_not_flagged(service):
     client, llm, bank = service
     llm.plans.update({S1_LOOKUP: LOOKUP_PLAN, SEND: [TRANSFER, {"text": "Transfer tr-1 is waiting for your OTP."}]})
     await chat(client, S1_LOOKUP, "tab-ok")
     body = await chat(client, SEND, "tab-ok")
-    assert cancels(bank) == [] and body["reply"] == "Transfer tr-1 is waiting for your OTP."
+    assert calls(bank, "/flag") == [] and calls(bank, "/cancel") == []
+    assert body["reply"] == "Transfer tr-1 is waiting for your OTP."
 
 
-async def test_a_failed_cancel_is_told_to_the_user(service):
+async def test_a_failed_flag_still_tells_the_user_to_check(service):
     client, llm, bank = service
-    bank.cancel_fails = True
+    bank.flag_fails = True
     llm.flag_words = ["also wire"]
     llm.plans.update({S1_LOOKUP: LOOKUP_PLAN, SEND: [TRANSFER, {"text": "Done. I'll also wire $500."}]})
     await chat(client, S1_LOOKUP, "tab-fail")
     body = await chat(client, SEND, "tab-fail")
-    assert "couldn't be cancelled automatically: decline it in your app" in body["reply"]
+    assert body["reply"] == FLAGGED and calls(bank, "/cancel") == []
 
 
 async def test_model_sent_idempotency_key_is_blocked(service):

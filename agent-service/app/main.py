@@ -59,13 +59,13 @@ def prepare_tool_call(ctx: Any, tool: str, params: dict[str, Any]) -> dict[str, 
     return params
 
 
-def make_undo(bank_url, transport: Any = None):
-    """on_output_blocked hook: when Anvil blocks the agent's reply, cancel
-    the pending transfers that turn started, so nothing the user never saw
-    is left waiting for an OTP. *bank_url* is a callable (the base URL can
-    change with a remote bundle)."""
+def make_flagger(bank_url, transport: Any = None):
+    """on_output_blocked hook: when Anvil blocks the agent's reply, flag the
+    pending transfers that turn started. They stay pending (the block may be
+    a false positive); the OTP modal warns the user before they approve.
+    *bank_url* is a callable (the base URL can change with a remote bundle)."""
 
-    async def undo(agent_id: str, tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    async def flag(agent_id: str, tool_calls: list[dict[str, Any]], reason: str) -> list[dict[str, Any]]:
         out = []
         for call in tool_calls:
             data = call.get("response") if isinstance(call.get("response"), dict) else {}
@@ -74,17 +74,18 @@ def make_undo(bank_url, transport: Any = None):
             transfer_id = data["transfer_id"]
             try:
                 async with httpx.AsyncClient(timeout=10, transport=transport) as client:
-                    resp = await client.post(f"{bank_url()}/transfers/{transfer_id}/cancel",
-                                             json={"user_id": BANK_USER_ID})
+                    resp = await client.post(f"{bank_url()}/transfers/{transfer_id}/flag",
+                                             json={"user_id": BANK_USER_ID, "reason": reason[:500]})
                 ok = resp.status_code < 400
             except httpx.HTTPError:
                 ok = False
-            (logger.info if ok else logger.error)(
-                "Blocked reply: %s pending transfer %s", "cancelled" if ok else "could not cancel", transfer_id)
-            out.append({"tool": "initiate_transfer", "id": transfer_id, "what": "a pending transfer", "cancelled": ok})
+            (logger.warning if ok else logger.error)(
+                "Blocked reply: %s pending transfer %s", "flagged" if ok else "could not flag", transfer_id)
+            out.append({"tool": "initiate_transfer", "id": transfer_id, "what": "a pending transfer",
+                        "where": "Ironclad", "flagged": ok})
         return out
 
-    return undo
+    return flag
 
 
 def build_platform(**platform_kwargs: Any) -> Platform:
@@ -103,7 +104,7 @@ def build_platform(**platform_kwargs: Any) -> Platform:
     url, key = os.getenv("BASTION_URL"), os.getenv("BASTION_KEY")
     bank_url = os.getenv("IRONCLAD_BASE_URL")
     holder: dict[str, Platform] = {}
-    platform_kwargs.setdefault("on_output_blocked", make_undo(
+    platform_kwargs.setdefault("on_output_blocked", make_flagger(
         lambda: holder["platform"].config.platform.apps[APP]["base_url"].rstrip("/"),
         platform_kwargs.get("http_transport"),
     ))

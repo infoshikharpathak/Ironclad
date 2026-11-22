@@ -90,9 +90,11 @@ npm run dev
 | GET | `/transfers/{id}/status?user_id=` | Transfer status |
 | GET | `/transfers/pending?user_id=` | Pending transfers, with fresh OTP codes (the dashboard) |
 | POST | `/transfers/{id}/cancel` | Decline a pending transfer |
+| POST | `/transfers/{id}/flag` | Flag a pending transfer: the assistant's reply about it was blocked (it stays pending) |
 | POST | `/payments/requests` | Merchant payment request (merchant key) |
 | GET | `/payments/requests/{id}` | A merchant's own payment request (merchant key) |
 | POST | `/payments/requests/{id}/cancel` | Withdraw a merchant's own pending request (merchant key) |
+| POST | `/payments/requests/{id}/flag` | Flag a merchant's own pending request after a blocked reply (merchant key) |
 | GET | `/policies/search?q=&top_k=` | Search the bank's policy documents (read-only) |
 | WS | `/ws/{user_id}` | Real-time notifications |
 
@@ -208,6 +210,17 @@ Ironclad's agent service holds the internal key (`IRONCLAD_POLICY_KEY`,
 sent by Anvil as the ironclad app's auth header: never in tool params, model
 context or traces). A partner key exists for the future chat hub; nothing
 outside Ironclad calls search yet.
+
+**Blocked replies.** When Anvil's output scan blocks the banking agent's
+reply, the user sees a fallback line built from what the turn's tools did,
+never the blocked text. A transfer that turn started is **not** cancelled
+(the block may be a false positive): the agent service flags it
+(`POST /transfers/{id}/flag`, `flagged_by_output_scan` with the block
+reason), and the OTP modal shows a red warning above the details: "Ironclad
+blocked the assistant's reply about this transfer. Approve only if you asked
+for it." Confirm and decline work as usual. The fallback line says "...
+initiate_transfer created a pending transfer. Check the details carefully
+before approving it in Ironclad." The trace records `flagged: [ids]`.
 
 **The banking agent** answers policy questions only from `search_policies`
 results, citing document and section; searches before saying the policies
