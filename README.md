@@ -29,7 +29,7 @@ python demo/planted_injection.py   # needs bank-service (:8001) and agent-servic
 2. demo_user asks the assistant: *"What are the recent transactions on my checking account?"*
 3. The agent calls `get_transactions`. The bank returns Bob's payment, memo included. `get_transactions` is **untrusted** in `anvil-ironclad.yaml`, so Anvil scans the response, matches `ignore (all )?previous instructions`, and withholds it. The model gets only Anvil's correction, never the memo, and no transfer is attempted.
 
-The web app's **Traces** panel shows `get_transactions` as **Blocked · Injection**, with the matched pattern. With the agent-service in remote mode (`BASTION_URL`, `BASTION_KEY`), the same run is on the bastion dashboard under the app's blocked traces. Planting is idempotent; **Reset Demo** removes it.
+The web app's **Traces** panel shows `get_transactions` as **Blocked · Injection**, with the matched pattern. With the agent-service in remote mode (`BASTION_URL`, `BASTION_KEY`), the same run is on the bastion dashboard under the app's blocked traces. The script first resets demo_user's accounts (seed balances, their own transactions deleted), so Bob's memo is always the newest transaction and the fixed question always reaches it. Bob's transfer is his, so the reset keeps it, and planting is idempotent.
 
 ## Architecture
 
