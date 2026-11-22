@@ -286,3 +286,33 @@ async def cancel_payment_request(payment_request_id: str, authorization: str | N
         "data": {"transfer_id": payment_request_id, "reason": f"Cancelled by {merchant['display_name']}"},
     })
     return _out(updated, merchant)
+
+
+class FlagBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reason: str = Field(min_length=1, max_length=500)
+
+
+@router.post("/requests/{payment_request_id}/flag")
+async def flag_payment_request(payment_request_id: str, request: Request,
+                               authorization: str | None = Header(default=None)):
+    """The merchant's assistant had its reply about this payment blocked by
+    an output scan. The request stays pending and the user's OTP modal warns
+    them before they approve it. Only the merchant that made it can flag it."""
+    from .transfers import flag_pending
+
+    merchant = await _merchant(authorization)
+    try:
+        body = FlagBody.model_validate(await request.json())
+    except (ValidationError, ValueError) as exc:
+        raise BankError(422, "INVALID_REQUEST", "Body must be {\"reason\": \"...\"}.") from exc
+    pool = get_pool()
+    row = await pool.fetchrow(
+        "SELECT * FROM transactions WHERE id = $1 AND merchant_id = $2", payment_request_id, merchant["merchant_id"]
+    )
+    if row is None:
+        raise BankError(404, "PAYMENT_REQUEST_NOT_FOUND", f"Payment request {payment_request_id} not found.")
+    row = await _expire_if_due(row)
+    result = await flag_pending(pool, row, body.reason)
+    return {"payment_request_id": payment_request_id, "status": "pending_otp",
+            "flagged_by_output_scan": result["flagged_by_output_scan"]}

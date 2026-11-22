@@ -110,6 +110,9 @@ export interface PendingTransfer {
   merchant_display_name?: string | null;
   order_ref?: string | null;
   channel?: 'checkout' | 'agent' | null;
+  // Set when Ironclad blocked the assistant's reply about it (output scan).
+  flagged_by_output_scan?: boolean;
+  flag_reason?: string | null;
   otp_code: string;
   expires_at: string | null;
   created_at: string;

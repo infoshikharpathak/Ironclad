@@ -16,6 +16,7 @@ services:
       - ./db/003_policies.sql:/docker-entrypoint-initdb.d/03-policies.sql
       - ./db/004_policy_hybrid.sql:/docker-entrypoint-initdb.d/04-policy-hybrid.sql
       - ./db/005_policy_access.sql:/docker-entrypoint-initdb.d/05-policy-access.sql
+      - ./db/006_transfer_flags.sql:/docker-entrypoint-initdb.d/06-transfer-flags.sql
     ports:
       - "5432:5432"
     healthcheck:

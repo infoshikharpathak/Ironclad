@@ -4,9 +4,10 @@ import { useBank } from '../context/BankContext';
 import { formatCurrency } from './AccountCard';
 import type { ApiError } from '../types';
 import { isAgentStarted, merchantChannelLine } from '../lib/merchant';
+import FlagWarning from './FlagWarning';
 
 export default function PendingTransfers() {
-  const { refreshAccounts, addToast } = useBank();
+  const { refreshAccounts, addToast, flaggedTransfers } = useBank();
   const [transfers, setTransfers] = useState<PendingTransfer[]>([]);
   const [loading, setLoading] = useState(true);
   const [confirming, setConfirming] = useState<string | null>(null);
@@ -79,6 +80,7 @@ export default function PendingTransfers() {
       {transfers.map((t) => {
         const isAgent = isAgentStarted(t);
         const channelLine = merchantChannelLine(t);
+        const isFlagged = !!t.flagged_by_output_scan || flaggedTransfers.has(t.transfer_id);
         return (
           <div
             key={t.transfer_id}
@@ -98,6 +100,8 @@ export default function PendingTransfers() {
               </div>
               <span className="text-[10px] text-gray-500 font-mono">{t.transfer_id}</span>
             </div>
+
+            {isFlagged && <FlagWarning compact />}
 
             {/* From → To */}
             <div className="flex items-center gap-3 text-sm">

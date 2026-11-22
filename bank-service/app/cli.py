@@ -31,7 +31,7 @@ from . import config
 from .services import merchants as merchant_keys
 
 DB_DIR = Path(__file__).resolve().parents[2] / "db"
-MIGRATIONS = ["002_merchants.sql", "003_policies.sql", "004_policy_hybrid.sql", "005_policy_access.sql"]  # init.sql is the base schema
+MIGRATIONS = ["002_merchants.sql", "003_policies.sql", "004_policy_hybrid.sql", "005_policy_access.sql", "006_transfer_flags.sql"]  # init.sql is the base schema
 _ID = re.compile(r"^[a-z][a-z0-9_]{1,39}$")
 
 

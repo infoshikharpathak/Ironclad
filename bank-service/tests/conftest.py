@@ -39,7 +39,7 @@ async def bank(monkeypatch):
     await admin.execute(f"CREATE SCHEMA {schema}")
     await admin.execute(f"SET search_path TO {schema}, public")
     for name in ("init.sql", "002_merchants.sql", "003_policies.sql", "004_policy_hybrid.sql",
-                 "005_policy_access.sql"):
+                 "005_policy_access.sql", "006_transfer_flags.sql"):
         await admin.execute((DB_DIR / name).read_text())
     pool = await asyncpg.create_pool(TEST_DATABASE_URL, min_size=1, max_size=4,
                                      server_settings={"search_path": f"{schema},public"})

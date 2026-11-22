@@ -63,11 +63,14 @@ export interface OTPEvent {
   merchant_display_name?: string | null;
   order_ref?: string | null;
   channel?: 'checkout' | 'agent' | null;
+  // Set when Ironclad blocked the assistant's reply about it (output scan).
+  flagged_by_output_scan?: boolean;
+  flag_reason?: string | null;
   otp_code: string;
 }
 
 export interface WSEvent {
-  type: 'otp_required' | 'transfer_confirmed' | 'transfer_cancelled' | 'balance_updated';
+  type: 'otp_required' | 'transfer_confirmed' | 'transfer_cancelled' | 'transfer_flagged' | 'balance_updated';
   data: any;
 }
 

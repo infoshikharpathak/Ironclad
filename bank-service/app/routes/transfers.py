@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..db import get_pool
 from ..errors import BankError, account_not_found, forbidden, transfer_not_found, invalid_transfer
@@ -75,6 +75,9 @@ async def list_pending_transfers(user_id: str = Query(min_length=1)):
             "merchant_display_name": row["merchant_display_name"],
             "order_ref": row["order_ref"],
             "channel": row["channel"],
+            # Set when Anvil blocked the assistant's reply about it (POST .../flag).
+            "flagged_by_output_scan": row["flagged_by_output_scan"],
+            "flag_reason": row["flag_reason"],
             "otp_code": otp_code,
             "expires_at": row["otp_expires_at"].isoformat() if row["otp_expires_at"] else None,
             "created_at": row["created_at"].isoformat(),
@@ -360,6 +363,44 @@ async def cancel_transfer(transfer_id: str, body: CancelRequest):
         {"type": "transfer_cancelled", "data": {"transfer_id": transfer_id, "reason": "Declined by user"}},
     )
     return {"transfer_id": transfer_id, "status": "cancelled", "message": "Transfer cancelled."}
+
+
+class FlagRequest(BaseModel):
+    user_id: str
+    reason: str = Field(min_length=1, max_length=500)
+
+
+async def flag_pending(pool, row, reason: str) -> dict:
+    """Mark a pending transaction as flagged by the output scan and tell any
+    open browser, so the OTP modal shows the warning. Confirm and decline
+    still work as usual. Already-closed transactions are returned as they are."""
+    if row["status"] != "pending_otp":
+        raise BankError(422, "TRANSFER_NOT_PENDING", f"Transfer is {row['status']}, not pending_otp")
+    updated = await pool.fetchrow(
+        "UPDATE transactions SET flagged_by_output_scan = true, flag_reason = $2 "
+        "WHERE id = $1 AND status = 'pending_otp' RETURNING *",
+        row["id"], reason,
+    )
+    if updated is None:
+        raise BankError(422, "TRANSFER_NOT_PENDING", "Transfer is no longer pending_otp")
+    await manager.send_to_user(row["user_id"], {
+        "type": "transfer_flagged",
+        "data": {"transfer_id": row["id"], "flagged_by_output_scan": True, "flag_reason": reason},
+    })
+    return {"transfer_id": row["id"], "status": updated["status"], "flagged_by_output_scan": True}
+
+
+@router.post("/{transfer_id}/flag")
+async def flag_transfer(transfer_id: str, body: FlagRequest):
+    """Flag a pending transfer: the assistant's reply about it was blocked by
+    the output scan. It stays pending; the user decides."""
+    pool = get_pool()
+    row = await pool.fetchrow("SELECT * FROM transactions WHERE id = $1", transfer_id)
+    if row is None:
+        raise transfer_not_found(transfer_id)
+    if row["user_id"] != body.user_id:
+        raise forbidden("You do not own this transfer")
+    return await flag_pending(pool, row, body.reason)
 
 
 @router.get("/{transfer_id}/status")

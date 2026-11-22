@@ -23,6 +23,8 @@ interface BankContextType {
   // OTP modal
   otpEvent: OTPEvent | null;
   clearOtp: () => void;
+  // Transfers flagged after their OTP push (the assistant's reply was blocked)
+  flaggedTransfers: Set<string>;
   // Toasts
   toasts: Toast[];
   addToast: (message: string, variant?: Toast['variant']) => void;
@@ -38,6 +40,7 @@ export function BankProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [otpEvent, setOtpEvent] = useState<OTPEvent | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [flaggedTransfers, setFlaggedTransfers] = useState<Set<string>>(new Set());
 
   const addToast = useCallback((message: string, variant: Toast['variant'] = 'info') => {
     const id = ++toastCounter;
@@ -94,6 +97,16 @@ export function BankProvider({ children }: { children: ReactNode }) {
                 current && current.transfer_id === event.data.transfer_id ? null : current,
               );
               break;
+            case 'transfer_flagged': {
+              const id: string = event.data.transfer_id;
+              setFlaggedTransfers((prev) => new Set(prev).add(id));
+              setOtpEvent((current) =>
+                current && current.transfer_id === id
+                  ? { ...current, flagged_by_output_scan: true, flag_reason: event.data.flag_reason }
+                  : current,
+              );
+              break;
+            }
             case 'balance_updated':
               refreshAccounts();
               break;
@@ -124,6 +137,7 @@ export function BankProvider({ children }: { children: ReactNode }) {
         loading,
         otpEvent,
         clearOtp,
+        flaggedTransfers,
         toasts,
         addToast,
         removeToast,

@@ -4,15 +4,17 @@ import { useBank } from '../context/BankContext';
 import { formatCurrency } from './AccountCard';
 import type { ApiError } from '../types';
 import { isAgentStarted, merchantChannelLine } from '../lib/merchant';
+import FlagWarning from './FlagWarning';
 
 export default function OTPModal() {
-  const { otpEvent, clearOtp, refreshAccounts, addToast } = useBank();
+  const { otpEvent, clearOtp, refreshAccounts, addToast, flaggedTransfers } = useBank();
   const [input, setInput] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!otpEvent) return null;
 
+  const isFlagged = !!otpEvent.flagged_by_output_scan || flaggedTransfers.has(otpEvent.transfer_id);
   const isAgentInitiated = isAgentStarted(otpEvent);
   const merchantName = otpEvent.merchant_display_name;
   const channelLine = merchantChannelLine(otpEvent);
@@ -50,6 +52,9 @@ export default function OTPModal() {
           {merchantName ? `Pay ${formatCurrency(otpEvent.amount)} to ${merchantName} (merchant)` : 'Confirm Transfer'}
         </h2>
         {channelLine && <p className="text-xs text-gray-400 mb-3">{channelLine}</p>}
+
+        {/* Output-scan warning, above everything else about the transfer */}
+        {isFlagged && <FlagWarning />}
 
         {/* Agent badge */}
         {isAgentInitiated && (
