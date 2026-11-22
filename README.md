@@ -242,6 +242,19 @@ for it." Confirm and decline work as usual. The fallback line says "...
 initiate_transfer created a pending transfer. Check the details carefully
 before approving it in Ironclad." The trace records `flagged: [ids]`.
 
+**Requested transfers aren't flagged.** When the output classifier labels
+a reply `unrequested_action`, bastion asks the agent service, for each
+transfer the turn started, whether the user asked for it
+(`app/requested.py`, no LLM). It counts as requested only if, in the user's
+messages of this turn and the previous two, the user wrote the transfer's
+amount ("$50", "50 dollars", "50.00", "$1,000", "pay Alice 120") and named
+the payee (directory name, first name or account number; "savings" or
+"checking" for their own accounts), and the turn is a request: a "can
+I...?" doesn't count, and a bare "yes" counts only after the agent asked
+whether to go ahead. A turn with a withheld tool response never counts. A
+matched transfer isn't flagged; anything else keeps the red warning. The
+trace records `requested_check`.
+
 **The banking agent** answers policy questions only from `search_policies`
 results, citing document and section; searches before saying the policies
 don't cover something; answers "can I...?" questions without acting; and

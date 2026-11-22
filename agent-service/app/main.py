@@ -31,7 +31,7 @@ if os.path.exists(_forge_env):
 
 from bastion import Platform, load_config  # noqa: E402
 
-from . import approval  # noqa: E402
+from . import approval, requested  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(name)s  %(message)s")
 logger = logging.getLogger("ironclad-agent")
@@ -107,6 +107,7 @@ def build_platform(**platform_kwargs: Any) -> Platform:
     url, key = os.getenv("BASTION_URL"), os.getenv("BASTION_KEY")
     bank_url = os.getenv("IRONCLAD_BASE_URL")
     holder: dict[str, Platform] = {}
+    platform_kwargs.setdefault("is_requested_action", requested.is_requested_action)
     platform_kwargs.setdefault("on_output_blocked", make_flagger(
         lambda: holder["platform"].config.platform.apps[APP]["base_url"].rstrip("/"),
         platform_kwargs.get("http_transport"),

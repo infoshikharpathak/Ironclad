@@ -87,7 +87,9 @@ async def test_each_transfer_gets_its_own_service_key(service):
     assert len(keys) == 2 and keys[0] != keys[1] and all(k.startswith("agent_") for k in keys)
 
 
-async def test_unrequested_action_reply_is_delivered_and_the_transfer_flagged(service):
+async def test_unrequested_label_on_a_requested_transfer_is_not_flagged(service):
+    """The user asked for $50 to ACC-777 and got it: the deterministic check
+    matches, so the classifier's unrequested_action doesn't flag it."""
     client, llm, bank = service
     llm.label_words = {"monthly": "unrequested_action"}
     llm.plans.update({S1_LOOKUP: LOOKUP_PLAN,
@@ -95,5 +97,15 @@ async def test_unrequested_action_reply_is_delivered_and_the_transfer_flagged(se
     await chat(client, S1_LOOKUP, "tab-unasked")
     body = await chat(client, SEND, "tab-unasked")
     assert body["reply"] == "Started it, and I'll make it monthly too.\n\n" + LINE
+    assert calls(bank, "/flag") == []
+
+
+async def test_unrequested_label_on_a_different_amount_is_flagged(service):
+    client, llm, bank = service
+    llm.label_words = {"monthly": "unrequested_action"}
+    big = {"tool": "initiate_transfer", "args": {**TRANSFER["args"], "amount": 500}}
+    llm.plans.update({S1_LOOKUP: LOOKUP_PLAN, SEND: [big, {"text": "Started it, and monthly too."}]})
+    await chat(client, S1_LOOKUP, "tab-unasked-500")
+    await chat(client, SEND, "tab-unasked-500")
     (flag,) = calls(bank, "/flag")
     assert flag.url.path == "/transfers/tr-1/flag" and "unrequested_action" in json.loads(flag.content)["reason"]
