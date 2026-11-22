@@ -66,12 +66,12 @@ async def test_transfer_without_lookups_is_blocked_with_correction(service):
     body = await chat(client, S1_SEND, "fresh-tab")
     (call,) = body["tool_calls"]
     assert call["blocked"] is True and call["result"]["blocked"] is True
-    assert "get_accounts, lookup_account required before 'initiate_transfer'" in call["result"]["error"]
+    assert "one of get_accounts / lookup_account required before 'initiate_transfer'" in call["result"]["error"]
     assert "/transfers/initiate" not in bank.paths()
     # the correction reached the model as the tool result
     (seen,) = llm.tool_results_seen(S1_SEND)
     assert seen["correction"]["violation"] == "missing_prerequisite"
-    assert seen["correction"]["required_actions"] == ["get_accounts", "lookup_account"]
+    assert seen["correction"]["required_actions"] == ["one of get_accounts / lookup_account"]
 
 
 async def test_two_concurrent_sessions_share_nothing(service):
@@ -167,8 +167,8 @@ async def test_trace_endpoints_keep_their_shapes_and_are_session_scoped(service)
     assert all(set(t) == {"name", "trust", "injection_scanning", "description"} for t in c1["tools"])
     assert {t["name"]: t["trust"] for t in c1["tools"]}["initiate_transfer"] == "untrusted"
     assert c1["sequences"] == [
-        {"before": "initiate_transfer", "requires": ["get_accounts"], "match_fields": ["user_id"]},
-        {"before": "initiate_transfer", "requires": ["lookup_account"], "match_fields": []},
+        {"before": "initiate_transfer", "requires": [], "requires_any": ["get_accounts", "lookup_account"],
+         "match_fields": []},
     ]
     assert set(c1["settings"]) == {"injection_scanning", "default_trust", "session_ttl"}
     assert c1["sequence_state"] == ["get_accounts", "lookup_account"] and c2["sequence_state"] == []
@@ -336,3 +336,17 @@ async def test_policy_key_goes_in_a_header_never_in_params_or_traces(service):
     export = (await client.get("/traces/export", params={"session_id": "tab-key-hdr"})).text
     assert key not in export
 
+
+
+async def test_get_accounts_alone_satisfies_the_transfer_rule(service):
+    """'move 200 to savings': the user's own accounts come from get_accounts,
+    so no recipient lookup is needed."""
+    client, llm, bank = service
+    msg = "Move 200 to savings."
+    llm.plans[msg] = [{"tool": "get_accounts", "args": {}},
+                      {"tool": "initiate_transfer", "args": {"from_account": "acc-chk", "to_account": "acc-sav",
+                                                             "amount": 200}},
+                      {"text": "Started it."}]
+    body = await chat(client, msg, "tab-own")
+    assert [c["blocked"] for c in body["tool_calls"]] == [False, False]
+    assert "/transfers/initiate" in bank.paths()

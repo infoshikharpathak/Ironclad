@@ -264,13 +264,11 @@ agents:
       - search_policies
       - initiate_transfer
     sequences:
-      # Must look up the source account before initiating a transfer
+      # Must have looked at the accounts first: the user's own (get_accounts,
+      # which gives the real account IDs, e.g. for "move 200 to savings") or
+      # the recipient's (lookup_account). Either one is enough.
       - before: initiate_transfer
-        requires: [get_accounts]
-        match_fields: [user_id]
-      # Must look up the recipient before sending to an external account
-      - before: initiate_transfer
-        requires: [lookup_account]
+        requires_any: [get_accounts, lookup_account]
         match_fields: []
     strictness: strict
     trust_overrides:
