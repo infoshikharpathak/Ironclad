@@ -201,15 +201,21 @@ internal documents answer looks like any question nothing answers for it.
 Keys are `pk_` + 32 random bytes, stored as SHA-256:
 
 ```bash
-python -m app.cli policy-keys create ironclad-agent-service --levels public,internal
+python -m app.cli policy-keys create ironclad-banking-agent --levels public
 python -m app.cli policy-keys create chat-hub-partner --levels public
+python -m app.cli policy-keys create ironclad-internal --levels public,internal
 python -m app.cli policy-keys list | revoke <name>
 ```
 
-Ironclad's agent service holds the internal key (`IRONCLAD_POLICY_KEY`,
-sent by Anvil as the ironclad app's auth header: never in tool params, model
-context or traces). A partner key exists for the future chat hub; nothing
-outside Ironclad calls search yet.
+Each caller gets its own key, so each can be revoked on its own. The banking
+agent talks to customers, so its key (`IRONCLAD_POLICY_KEY`, sent by Anvil as
+the ironclad app's auth header: never in tool params, model context or
+traces) reads **public** policies only. A partner key exists for the future
+chat hub; nothing outside Ironclad calls search yet.
+
+**Internal policies are only reachable with the internal key, which no
+customer-facing agent has.** It exists for staff tooling; an internal ops
+agent (staff-only, with its own key) is possible future work.
 
 **Blocked replies.** When Anvil's output scan blocks the banking agent's
 reply, the user sees a fallback line built from what the turn's tools did,
@@ -273,9 +279,8 @@ the internal key: 15/15 returned the right internal document in the top 3.
 
 **Known limits:** a small corpus (14 documents), 45 retrieval questions and
 one embedding model, so differences of one or two questions are noise.
-Internal documents are readable through Ironclad's own customer-facing
-agent, which holds the internal key: a customer can ask it about them (one
-held-out answer quoted an internal fraud threshold).
+(An earlier phase gave the banking agent the internal key, and one held-out
+answer quoted an internal fraud threshold; it now has a public-only key.)
 
 ## Known limitations
 - `POST /accounts/reset` resets the user's own balances and deletes their

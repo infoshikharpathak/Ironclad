@@ -13,7 +13,9 @@ from bastion.classifier import is_classifier_request
 from openai.types.chat import ChatCompletion
 
 os.environ.setdefault("OPENAI_API_KEY", "dummy-key-for-tests")
-os.environ.setdefault("IRONCLAD_POLICY_KEY", "pk_test_internal_key")
+# The banking agent talks to customers, so its key reads public policies only.
+PUBLIC_KEY, INTERNAL_KEY = "pk_test_banking_agent_public", "pk_test_internal_unassigned"
+os.environ.setdefault("IRONCLAD_POLICY_KEY", PUBLIC_KEY)
 os.environ.pop("OPENAI_MODEL", None)
 
 
@@ -23,6 +25,21 @@ def _completion(message: dict, finish: str) -> ChatCompletion:
         "choices": [{"index": 0, "finish_reason": finish, "message": message}],
         "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
     })
+
+
+POLICY_KEY_LEVELS = {PUBLIC_KEY: ["public"], INTERNAL_KEY: ["public", "internal"]}
+POLICY_CHUNKS = [
+    {"level": "public", "doc_slug": "transfer-limits", "doc_title": "Transfer Limits",
+     "section": "Transfers to other people", "effective_date": "2026-10-01",
+     "content": "Transfers to another person are limited to $5,000.00 per transfer and $10,000.00 per day."},
+    {"level": "internal", "doc_slug": "merchant-risk-rules", "doc_title": "Merchant Risk Rules",
+     "section": "Suspension triggers", "effective_date": "2026-11-01",
+     "content": "A merchant is suspended when its dispute rate over 30 days exceeds 2%."},
+    {"level": "internal", "doc_slug": "fraud-monitoring-thresholds", "doc_title": "Fraud Monitoring Thresholds",
+     "section": "Review triggers", "effective_date": "2026-11-01",
+     "content": "Transfers over $2,000 to a new recipient are held for fraud review."},
+]
+INTERNAL_DOCS = {c["doc_slug"] for c in POLICY_CHUNKS if c["level"] == "internal"}
 
 
 class StubLLM:
@@ -106,11 +123,15 @@ class StubBank:
             return httpx.Response(200, json={"account_number": number, "owner_name": "Ana Silva",
                                              "account_type": "checking", "currency": "USD"})
         if path == "/policies/search":
-            return httpx.Response(200, json={"query": request.url.params["q"], "min_score": 0.43, "results": [
-                {"doc_slug": "transfer-limits", "doc_title": "Transfer Limits", "section": "Transfers to other people",
-                 "effective_date": "2026-10-01", "score": 0.77,
-                 "content": "Transfers to another person are limited to $5,000.00 per transfer and $10,000.00 per day."},
-            ]})
+            # Like the bank: the key decides the levels searched, inside the query.
+            key = request.headers.get("authorization", "").removeprefix("Bearer ")
+            levels = POLICY_KEY_LEVELS.get(key)
+            if levels is None:
+                return httpx.Response(401, json={"error": "POLICY_KEY_INVALID", "message": "Unknown policy key."})
+            results = [dict(c, score=0.77) for c in POLICY_CHUNKS if c["level"] in levels]
+            for r in results:
+                r.pop("level")
+            return httpx.Response(200, json={"query": request.url.params["q"], "min_score": 0.43, "results": results})
         if path.startswith("/transfers/") and path.endswith("/flag"):
             if self.flag_fails:
                 return httpx.Response(500, json={"error": "BOOM"})
