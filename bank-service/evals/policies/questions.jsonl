@@ -23,3 +23,4 @@
 {"id": "q23", "kind": "unanswerable", "question": "Can I deposit a cheque by taking a photo of it?", "match": "none", "expected": []}
 {"id": "q24", "kind": "unanswerable", "question": "How do I open a joint account with my partner?", "match": "none", "expected": []}
 {"id": "q25", "kind": "unanswerable", "question": "Which ATMs can I use without a fee?", "match": "none", "expected": []}
+{"id": "q26", "kind": "paraphrased", "question": "Do I pay extra when I buy something in a different currency?", "match": "any", "expected": [{"doc_slug": "account-types-and-fees", "section": "Other fees"}]}
