@@ -49,7 +49,10 @@ Browser → nginx (port 3000)
 # 2. Bank service
 cd bank-service
 pip install -r requirements.txt
+python -m app.cli migrate            # existing database: add the merchants schema (idempotent)
 uvicorn app.main:app --port 8001 --reload
+# tests: the payments tests need a Postgres they can create schemas in
+TEST_DATABASE_URL=postgresql://anvil:devpassword@localhost:5432/anvil_bank pytest -q tests
 
 # 3. Agent service (local mode reads ../anvil-ironclad.yaml; the bank is at localhost:8001,
 #    or wherever IRONCLAD_BASE_URL points: docker-compose sets http://bank-service:8001)
@@ -72,7 +75,75 @@ npm run dev
 | GET | `/accounts/{id}?user_id=` | Single account |
 | GET | `/accounts/{id}/transactions?user_id=` | Transaction history |
 | POST | `/accounts/reset?user_id=` | Reset demo balances |
-| POST | `/transfers/initiate` | Start a transfer (returns OTP) |
+| POST | `/transfers/initiate` | Start a transfer (the OTP goes to the dashboard, never the caller) |
 | POST | `/transfers/{id}/confirm` | Confirm with OTP |
 | GET | `/transfers/{id}/status?user_id=` | Transfer status |
+| GET | `/transfers/pending?user_id=` | Pending transfers, with fresh OTP codes (the dashboard) |
+| POST | `/transfers/{id}/cancel` | Decline a pending transfer |
+| POST | `/payments/requests` | Merchant payment request (merchant key) |
+| GET | `/payments/requests/{id}` | A merchant's own payment request (merchant key) |
 | WS | `/ws/{user_id}` | Real-time notifications |
+
+## Merchant payments
+
+Registered merchants (FoodDash, QuickMart, ...) can ask an Ironclad user to
+pay them. The merchant never moves money itself: each request is a pending
+transfer on the same OTP flow as any other, and nothing moves until the user
+types the OTP in Ironclad.
+
+**Registry.** `merchants` (see `db/002_merchants.sql`): `merchant_id`,
+`display_name`, `settlement_account_id`, `api_key_hash`,
+`max_payment_amount`, `agent_payments_allowed`, `status`
+(`active`/`suspended`). Seeded:
+
+| Merchant | Status | Agent payments | Limit | Settlement account |
+|---|---|---|---|---|
+| FoodDash | active | yes | $200 | `acc_merchant_fooddash_settlement` |
+| QuickMart | active | no | $500 | `acc_merchant_quickmart_settlement` |
+
+**Keys.** `mk_` + 32 random bytes, sent as `Authorization: Bearer mk_...`,
+stored only as a SHA-256 hash. Seeded merchants start without a key; issue
+one (shown once) from `bank-service/`:
+
+```bash
+python -m app.cli merchants issue-key fooddash
+python -m app.cli merchants create acme "Acme" --limit 100 [--agent-payments]
+python -m app.cli merchants set-status quickmart suspended
+python -m app.cli merchants list
+```
+
+**`POST /payments/requests`**
+
+```json
+{"order_ref": "ord-123", "amount": 31.00, "user_id": "demo_user",
+ "channel": "checkout", "idempotency_key": "fooddash-ord-123", "description": "optional"}
+```
+
+- The merchant is whoever owns the key. The payee is always that merchant's
+  registered settlement account and the payer is the user's checking
+  account: a body with `merchant_id`, `to_account`, `payee` or any other
+  account field is refused (422 `PAYEE_NOT_ALLOWED`), as is any unknown field.
+- `channel` is `checkout` (the merchant's app) or `agent` (the merchant's AI
+  agent). The OTP modal says which: "FoodDash checkout" or "Started by
+  FoodDash's AI agent" (with the AI warning).
+- Checks, in order: key (401), merchant active (403 `MERCHANT_SUSPENDED`),
+  body (422), `channel: agent` only if `agent_payments_allowed` (403
+  `AGENT_PAYMENTS_NOT_ALLOWED`), 0 < amount ≤ limit (422 `AMOUNT_OVER_LIMIT`),
+  idempotency, then balance (422 `INSUFFICIENT_FUNDS`).
+- Idempotency keys are per merchant. The same key with the same body returns
+  the existing request (`idempotent_replay: true`, no new OTP); the same key
+  with a different body is 409 `IDEMPOTENCY_KEY_REUSED`.
+- Response: `payment_request_id`, `status: pending_otp`, `amount`,
+  `merchant_display_name`, `order_ref`, `channel`, `expires_at`. Never the OTP.
+
+**`GET /payments/requests/{id}`** returns the request if it's this
+merchant's (any other ID is 404, so merchants can't probe each other).
+`status` is `pending_otp`, `confirmed`, `cancelled` (declined, too many OTP
+attempts, or failed at confirm) or `expired` (past `OTP_TTL_SECONDS`;
+applied when read).
+
+## Known limitations
+
+- `/transfers/pending` and `/transfers/{id}/confirm` are not authenticated.
+  User identity is a parameter. Production would require the user's session
+  on both.
