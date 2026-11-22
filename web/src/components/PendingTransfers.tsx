@@ -3,6 +3,7 @@ import { getPendingTransfers, confirmTransfer, cancelTransfer, type PendingTrans
 import { useBank } from '../context/BankContext';
 import { formatCurrency } from './AccountCard';
 import type { ApiError } from '../types';
+import { isAgentStarted, merchantChannelLine } from '../lib/merchant';
 
 export default function PendingTransfers() {
   const { refreshAccounts, addToast } = useBank();
@@ -76,7 +77,8 @@ export default function PendingTransfers() {
       </h2>
 
       {transfers.map((t) => {
-        const isAgent = t.initiated_by === 'agent';
+        const isAgent = isAgentStarted(t);
+        const channelLine = merchantChannelLine(t);
         return (
           <div
             key={t.transfer_id}
@@ -107,8 +109,15 @@ export default function PendingTransfers() {
               <div>
                 <span className="text-gray-500 text-xs">To </span>
                 <span className="text-gray-300">{t.to_name}</span>
+                {t.merchant_display_name && <span className="text-gray-500 text-xs"> (merchant)</span>}
               </div>
             </div>
+
+            {channelLine && (
+              <p className="text-xs text-gray-400">
+                {channelLine}{t.order_ref && <> · order <span className="font-mono">{t.order_ref}</span></>}
+              </p>
+            )}
 
             {t.description && (
               <p className="text-xs text-gray-500">{t.description}</p>

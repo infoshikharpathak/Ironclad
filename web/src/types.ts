@@ -58,6 +58,11 @@ export interface OTPEvent {
   to_name: string;
   description: string;
   initiated_by: string;
+  // Set when a registered merchant requested the payment (POST /payments/requests).
+  merchant_id?: string | null;
+  merchant_display_name?: string | null;
+  order_ref?: string | null;
+  channel?: 'checkout' | 'agent' | null;
   otp_code: string;
 }
 

@@ -3,6 +3,7 @@ import { confirmTransfer, cancelTransfer } from '../lib/api';
 import { useBank } from '../context/BankContext';
 import { formatCurrency } from './AccountCard';
 import type { ApiError } from '../types';
+import { isAgentStarted, merchantChannelLine } from '../lib/merchant';
 
 export default function OTPModal() {
   const { otpEvent, clearOtp, refreshAccounts, addToast } = useBank();
@@ -12,8 +13,10 @@ export default function OTPModal() {
 
   if (!otpEvent) return null;
 
-  const isAgentInitiated = otpEvent.initiated_by === 'agent';
-  const isExternal = !otpEvent.to_account.startsWith('acc_demo_user_');
+  const isAgentInitiated = isAgentStarted(otpEvent);
+  const merchantName = otpEvent.merchant_display_name;
+  const channelLine = merchantChannelLine(otpEvent);
+  const isExternal = !merchantName && !otpEvent.to_account.startsWith('acc_demo_user_');
 
   const handleConfirm = async () => {
     if (!input.trim()) return;
@@ -43,14 +46,19 @@ export default function OTPModal() {
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6">
-        <h2 className="text-lg font-semibold text-white mb-1">Confirm Transfer</h2>
+        <h2 className="text-lg font-semibold text-white mb-1">
+          {merchantName ? `Pay ${formatCurrency(otpEvent.amount)} to ${merchantName} (merchant)` : 'Confirm Transfer'}
+        </h2>
+        {channelLine && <p className="text-xs text-gray-400 mb-3">{channelLine}</p>}
 
         {/* Agent badge */}
         {isAgentInitiated && (
           <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-lg bg-amber-900/30 border border-amber-700/50">
             <span className="text-amber-400 text-sm">🤖</span>
             <span className="text-xs text-amber-300 font-medium">
-              This transfer was initiated by an AI agent. Review the details carefully.
+              {merchantName
+                ? `This payment was requested by ${merchantName}'s AI agent. Review the details carefully.`
+                : 'This transfer was initiated by an AI agent. Review the details carefully.'}
             </span>
           </div>
         )}
@@ -79,7 +87,9 @@ export default function OTPModal() {
             <span className="text-gray-600 text-lg">→</span>
             <div className="text-center">
               <p className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">To</p>
-              <p className="text-sm font-medium text-white">{otpEvent.to_name}</p>
+              <p className="text-sm font-medium text-white">
+                {otpEvent.to_name}{merchantName && <span className="text-gray-500"> (merchant)</span>}
+              </p>
               <p className="text-[10px] text-gray-500 font-mono mt-0.5">
                 {otpEvent.to_account}
               </p>
@@ -98,6 +108,17 @@ export default function OTPModal() {
               <div>
                 <p className="text-xs text-gray-500 uppercase tracking-wider mb-0.5">Description</p>
                 <p className="text-sm text-gray-300">{otpEvent.description}</p>
+              </div>
+            </>
+          )}
+
+          {/* Merchant order */}
+          {otpEvent.order_ref && (
+            <>
+              <div className="border-t border-gray-700" />
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500">Order ref</span>
+                <span className="text-xs text-gray-300 font-mono">{otpEvent.order_ref}</span>
               </div>
             </>
           )}
