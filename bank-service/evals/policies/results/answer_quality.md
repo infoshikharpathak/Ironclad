@@ -140,3 +140,76 @@ Each question in a new agent session (gpt-4o-mini, Ironclad's banking agent with
 
 > It seems that the policy documents do not provide information about personal loans. I recommend contacting Customer Support for assistance regarding loan options available at Ironclad Bank.
 
+
+## Citation check (round 2)
+
+Same 10 held-out questions, hybrid + parent-child, after two changes: the banking agent now has a **public-only** policy key, and its instructions say every policy answer must cite the document and section it comes from. Citation is now part of the check: an answer that uses policy content without naming document and section counts as uncited.
+
+| Correct | Cites document and section | Exact section | Invents anything |
+|---|---|---|---|
+| 9/10 | 8/8 | 7/8 (h14 attributes one detail to the neighbouring section) | 0/10 |
+
+(8 answers need a citation: h01 was answered wrongly, h16 isn't covered.) Before the change: 5/8 exact, 2/8 partial, 1/8 uncited.
+
+| Id | Question | Session | Search query | Correct | Citation | Invents | Note |
+|---|---|---|---|---|---|---|---|
+| h01 | Is there a foreign transaction fee? | `answers-r4-h01-0d4f` | foreign transaction fee | no | — | no | Agent searched 'foreign transaction fee': empty (cosine 0.422 < 0.43, keyword rank just under 0.7), so it said not covered. Other fees covers it: a retrieval miss, not a label error. |
+| h02 | How often is savings interest paid? | `answers-r4-h02-5302` | savings interest payment frequency | yes | yes | no |  |
+| h03 | What is QuickMart's maximum payment amount? | `answers-r4-h03-9fe3` | QuickMart maximum payment amount | yes | yes | no |  |
+| h05 | Is phone support available around the clock? | `answers-r4-h05-5e8b` | phone support availability | yes | yes | no |  |
+| h07 | What happens if I mistype the six digits three times? | `answers-r4-h07-907b` | mistype six digits three times | yes | yes | no | No internal threshold this time (public-only key). |
+| h08 | Who actually gets my money when I buy food through the app? | `answers-r4-h08-8bd9` | who receives money when buying food through the app | yes | yes | no | Cites both How merchant payments work and Who receives the money. |
+| h10 | Will you warn me before the savings rate goes down? | `answers-r4-h10-c39d` | savings rate notification policies | yes | yes | no |  |
+| h12 | Can some random shopping bot pull money out of my account? | `answers-r4-h12-1485` | Can shopping bots withdraw money from accounts? | yes | yes | no | Cites both AI agents sections (in prose, not the parenthesis format). |
+| h14 | Can I move $20,000 from savings to checking, and does savings pay interest? | `answers-r4-h14-7583` | Does savings pay interest?; Can I move $20,000 from savings to checking? | yes | yes | no | Cites both expected sections; the daily-calculation detail comes from How interest is calculated, cited as Interest rate. |
+| h16 | Can I get a personal loan? | `answers-r4-h16-73aa` | personal loan | yes | — | no | Not covered, suggests support. |
+
+**h01, foreign transaction fee.** The policies do cover it (Account Types and Fees, Other fees: "There are no foreign transaction fees because Ironclad accounts only transact in USD"), so the answer is wrong and the label stands. The user's own wording finds the section at rank 1; the agent's shorter query falls just under the not-covered gate. A similar dev question was added (`q26`, "Do I pay extra when I buy something in a different currency?"); with the current settings it is found at rank 3 (a Recall@3 hit, not Recall@1). Settings were not retuned for it.
+
+### Replies (round 2)
+
+**h01**: Is there a foreign transaction fee?
+
+> The policy documents do not mention a foreign transaction fee. For more information, I suggest contacting Customer Support for assistance.
+
+**h02**: How often is savings interest paid?
+
+> Savings interest is calculated daily based on the end-of-day balance in your savings account and is paid into the account on the first business day of each month (Savings Interest, How interest is calculated).
+
+**h03**: What is QuickMart's maximum payment amount?
+
+> The maximum payment amount for QuickMart is $500.00 per payment request. If a request exceeds this limit, it will be refused before it reaches you (Merchant Payments, Merchant limits).
+
+**h05**: Is phone support available around the clock?
+
+> Phone support is available 24 hours a day, 7 days a week, but only for reporting fraud or a lost device. For other inquiries, customer support via chat in the Ironclad app is available from 8:00 AM to 8:00 PM Eastern Time, Monday to Saturday (Customer Support, Hours).
+
+**h07**: What happens if I mistype the six digits three times?
+
+> If you mistype the six-digit one-time passcode (OTP) three times, your request will be canceled for your protection. You'll then need to start a new request to proceed (OTP and Transfer Security, Wrong codes).
+
+**h08**: Who actually gets my money when I buy food through the app?
+
+> When you buy food through the app, the money goes to the merchant's own settlement account, which is recorded in Ironclad's merchant registry. For example, if you order from FoodDash, Ironclad facilitates the payment by creating a transaction from your account to FoodDash's account. You will see this as a pending payment in your app until you approve it with your OTP (One-Time Passcode) (Merchant Payments, How merchant payments work and Who receives the money).
+
+**h10**: Will you warn me before the savings rate goes down?
+
+> Yes, Ironclad will notify you at least 30 days in advance before lowering the savings rate. This notice will be provided in the app (Savings Interest, Rate changes).
+
+**h12**: Can some random shopping bot pull money out of my account?
+
+> No, a random shopping bot cannot pull money out of your Ironclad account. Only a merchant's AI assistant can initiate a payment request if the merchant has opted in to agent payments with Ironclad. Additionally, all such requests require your One-Time Passcode (OTP) for confirmation. AI agents from other companies do not have the ability to start transfers from your account. 
+> 
+> For more details, you can refer to the "AI Agents at Ironclad" document, particularly the sections on "Merchant AI agents" and "Agents outside Ironclad."
+
+**h14**: Can I move $20,000 from savings to checking, and does savings pay interest?
+
+> - You cannot move $20,000 from savings to checking because your savings account currently has a balance of $5,000. You can only transfer up to the available balance in the savings account (Transfer Limits, Transfers between your own accounts).
+> 
+> - Yes, savings accounts at Ironclad earn interest. The interest is calculated daily on the end-of-day balance and paid into the savings account on the first business day of each month. The annual percentage yield (APY) is currently 2.10% (Savings Interest, Interest rate).
+> 
+> Would you like to transfer a different amount?
+
+**h16**: Can I get a personal loan?
+
+> It appears that Ironclad's policies do not cover information about personal loans. I recommend contacting Customer Support for assistance regarding personal loan options.
