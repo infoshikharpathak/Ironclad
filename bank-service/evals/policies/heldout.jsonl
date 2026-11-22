@@ -1,0 +1,20 @@
+{"id": "h01", "kind": "direct", "question": "Is there a foreign transaction fee?", "match": "any", "expected": [{"doc_slug": "account-types-and-fees", "section": "Other fees"}]}
+{"id": "h02", "kind": "direct", "question": "How often is savings interest paid?", "match": "any", "expected": [{"doc_slug": "savings-interest", "section": "How interest is calculated"}]}
+{"id": "h03", "kind": "direct", "question": "What is QuickMart's maximum payment amount?", "match": "any", "expected": [{"doc_slug": "merchant-payments", "section": "Merchant limits"}]}
+{"id": "h04", "kind": "direct", "question": "How long are transaction records kept?", "match": "any", "expected": [{"doc_slug": "privacy-and-data-use", "section": "Retention"}]}
+{"id": "h05", "kind": "direct", "question": "Is phone support available around the clock?", "match": "any", "expected": [{"doc_slug": "customer-support", "section": "Hours"}]}
+{"id": "h06", "kind": "direct", "question": "Can a merchant cancel a payment I already approved?", "match": "any", "expected": [{"doc_slug": "merchant-payments", "section": "Expiry and cancellation"}]}
+{"id": "h07", "kind": "paraphrase", "question": "What happens if I mistype the six digits three times?", "match": "any", "expected": [{"doc_slug": "otp-and-transfer-security", "section": "Wrong codes"}]}
+{"id": "h08", "kind": "paraphrase", "question": "Who actually gets my money when I buy food through the app?", "match": "any", "expected": [{"doc_slug": "merchant-payments", "section": "Who receives the money"}]}
+{"id": "h09", "kind": "paraphrase", "question": "Is it possible to have a negative balance?", "match": "any", "expected": [{"doc_slug": "account-types-and-fees", "section": "Account types"}, {"doc_slug": "transfer-limits", "section": "Balance requirement"}]}
+{"id": "h10", "kind": "paraphrase", "question": "Will you warn me before the savings rate goes down?", "match": "any", "expected": [{"doc_slug": "savings-interest", "section": "Rate changes"}]}
+{"id": "h11", "kind": "paraphrase", "question": "What if I tap the request away because I don't know who sent it?", "match": "any", "expected": [{"doc_slug": "otp-and-transfer-security", "section": "Declining a request"}]}
+{"id": "h12", "kind": "paraphrase", "question": "Can some random shopping bot pull money out of my account?", "match": "any", "expected": [{"doc_slug": "ai-agents", "section": "Agents outside Ironclad"}, {"doc_slug": "ai-agents", "section": "Merchant AI agents"}]}
+{"id": "h13", "kind": "multi", "question": "Someone took over my account and the assistant moved money; how do I report it and will it be investigated?", "match": "all", "expected": [{"doc_slug": "fraud-and-account-freezes", "section": "Reporting fraud"}, {"doc_slug": "disputes-and-refunds", "section": "Disputes about AI agents"}]}
+{"id": "h14", "kind": "multi", "question": "Can I move $20,000 from savings to checking, and does savings pay interest?", "match": "all", "expected": [{"doc_slug": "transfer-limits", "section": "Transfers between your own accounts"}, {"doc_slug": "savings-interest", "section": "Interest rate"}]}
+{"id": "h15", "kind": "multi", "question": "Does the merchant see my balance, and how long is the payment request valid?", "match": "all", "expected": [{"doc_slug": "privacy-and-data-use", "section": "Merchants"}, {"doc_slug": "merchant-payments", "section": "Expiry and cancellation"}]}
+{"id": "h16", "kind": "unanswerable", "question": "Can I get a personal loan?", "match": "none", "expected": []}
+{"id": "h17", "kind": "unanswerable", "question": "Do you have a branch in Chicago?", "match": "none", "expected": []}
+{"id": "h18", "kind": "unanswerable", "question": "What is the penalty for paying off a car loan early?", "match": "none", "expected": []}
+{"id": "h19", "kind": "unanswerable", "question": "Can I buy stocks through Ironclad?", "match": "none", "expected": []}
+{"id": "h20", "kind": "unanswerable", "question": "How do I order a new debit card?", "match": "none", "expected": []}
