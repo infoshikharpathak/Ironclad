@@ -336,10 +336,3 @@ async def test_policy_key_goes_in_a_header_never_in_params_or_traces(service):
     export = (await client.get("/traces/export", params={"session_id": "tab-key-hdr"})).text
     assert key not in export
 
-
-async def test_instructions_retry_an_empty_search_with_the_users_words(service):
-    client, llm, bank = service
-    llm.plans["hi there"] = [{"text": "Hi!"}]
-    await chat(client, "hi there", "tab-retry-instr")
-    system = llm.requests[-1][0]["content"]
-    assert "search once more using the user's original question word for word" in system

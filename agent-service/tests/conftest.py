@@ -112,6 +112,7 @@ class StubBank:
         self.leak_otp = False  # behave like an old bank that returned the code
         self.memo = "Lunch"     # memo on the incoming payment get_transactions returns
         self.flag_fails = False
+        self.empty_queries: set[str] = set()  # policy searches that come back empty
         self.initiate_error = None  # (status, body) to refuse transfers
         self.payee_name = "Ana Silva"  # the directory name the bank returns as to_name
 
@@ -137,6 +138,8 @@ class StubBank:
             levels = POLICY_KEY_LEVELS.get(key)
             if levels is None:
                 return httpx.Response(401, json={"error": "POLICY_KEY_INVALID", "message": "Unknown policy key."})
+            if request.url.params["q"] in self.empty_queries:
+                return httpx.Response(200, json={"query": request.url.params["q"], "min_score": 0.43, "results": []})
             results = [dict(c, score=0.77) for c in POLICY_CHUNKS if c["level"] in levels]
             for r in results:
                 r.pop("level")

@@ -255,6 +255,13 @@ whether to go ahead. A turn with a withheld tool response never counts. A
 matched transfer isn't flagged; anything else keeps the red warning. The
 trace records `requested_check`.
 
+**Empty policy searches are retried by the service.** If `search_policies`
+comes back empty and the model's query differs from the user's message, the
+agent service searches once more with the user's latest message (cut to 300
+characters) before the model sees the result, through Anvil with the same
+key and level filter. The model gets the retry's results if it found
+anything; both searches are in the trace (`retried_with_user_text`).
+
 **The banking agent** answers policy questions only from `search_policies`
 results, citing document and section; searches before saying the policies
 don't cover something; answers "can I...?" questions without acting; and
