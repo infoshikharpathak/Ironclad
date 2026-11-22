@@ -162,49 +162,107 @@ There's no refund API.
 
 ## Policy search (RAG)
 
-`bank-service/policies/*.md` are Ironclad's (fictional) policies: fees,
-transfer limits, OTP security, merchant payments, disputes, fraud and
-freezes, savings interest, privacy, support, and AI agents. They're chunked
-by `##` section (long sections split at about 60 tokens with a little
-overlap; every chunk keeps its document, section and effective date),
-embedded with `text-embedding-3-small`, and stored in Ironclad's own Postgres
-with pgvector (`policy_chunks`, `db/003_policies.sql`, HNSW cosine index).
+`bank-service/policies/*.md` are Ironclad's (fictional) policies. Each has
+front matter with an access level: 10 are `public` (fees, transfer limits,
+OTP security, merchant payments, disputes, fraud and freezes, savings
+interest, privacy, support, AI agents) and 4 are `internal` (fraud
+monitoring thresholds, account freeze criteria, merchant risk rules, agent
+guardrail monitoring). They live in Ironclad's own Postgres with pgvector
+(`db/003`–`005`).
 
-- `python -m app.cli index-policies` embeds new or changed chunks only
-  (content hash), deletes chunks whose section is gone, and prints counts and
-  the embedding cost. Indexing all 10 documents (74 chunks) takes about
-  3,000 tokens, under $0.0001.
-- `GET /policies/search?q=...&top_k=3` (`q` 3–300 characters, `top_k` 1–5)
-  returns `doc_title`, `section`, `effective_date`, `content` and `score`
-  (cosine similarity). Results under the minimum score (0.43,
-  `POLICY_MIN_SCORE`) are dropped, so a question no policy covers returns an
-  empty list. Needs `OPENAI_API_KEY` to embed the query.
-- The banking agent has a `search_policies` tool (trusted: the bank writes
-  the documents; schema-checked by Anvil) and answers policy questions only
-  from its results, citing document and section, or says the policies don't
-  cover it. Nothing outside Ironclad can call it yet.
+**Indexing.** Each `##` section is a parent (`policy_sections`); it is split
+into child chunks of about 60 tokens with a little overlap
+(`policy_chunks`), each with an embedding (`text-embedding-3-small`) and a
+full-text `tsvector` (GIN index). Every chunk and section carries its
+document's level. `python -m app.cli index-policies` embeds new or changed
+chunks only (content hash, level included), removes what's gone, and prints
+counts and cost. All 14 documents (101 chunks) take about 4,300 tokens,
+under $0.0001.
 
-**Retrieval eval** (`bank-service/evals/policies/`, `python -m evals.policies.run`):
-25 questions written before any search ran: 8 direct, 9 paraphrased with
-little word overlap ("how long do I have to type the code?"), 3 spanning two
-documents, 5 the policies don't answer. Tuned only chunk size and minimum
-score:
+**Search.** `GET /policies/search?q=...&top_k=3` (`q` 3–300 characters,
+`top_k` 1–5). The children are matched twice, by vector (cosine) and by
+Postgres full-text search (OR of the question's terms, `ts_rank_cd`),
+merged with reciprocal rank fusion (k 5, keyword weight 0.25), and grouped
+by parent: each matching section is returned once, whole, with
+`doc_title`, `section`, `effective_date`, `content` and `score`. "Not
+covered": the result is empty unless the best child has cosine ≥ 0.43 or
+full-text rank ≥ 0.7. `POLICY_SEARCH_MODE` (`vector`, `keyword`, `hybrid`)
+switches setups for comparison.
 
-| Chunk size | Min score | Recall@1 | Recall@3 | MRR@3 | Answerable came back empty | Unanswerable came back empty |
+**Access.** Search needs a policy-access key (`Authorization: Bearer
+pk_...`; 401 without a valid one). The key alone decides the levels it can
+read; a `level`, `audience` or any other extra parameter is a 422. The level
+filter is inside the SQL of the vector query, the full-text query and the
+parent fetch, before ranking, so a public-only caller still gets up to
+`top_k` results, scores reflect only what it can read, and a question only
+internal documents answer looks like any question nothing answers for it.
+Keys are `pk_` + 32 random bytes, stored as SHA-256:
+
+```bash
+python -m app.cli policy-keys create ironclad-agent-service --levels public,internal
+python -m app.cli policy-keys create chat-hub-partner --levels public
+python -m app.cli policy-keys list | revoke <name>
+```
+
+Ironclad's agent service holds the internal key (`IRONCLAD_POLICY_KEY`,
+sent by Anvil as the ironclad app's auth header: never in tool params, model
+context or traces). A partner key exists for the future chat hub; nothing
+outside Ironclad calls search yet.
+
+**The banking agent** answers policy questions only from `search_policies`
+results, citing document and section; searches before saying the policies
+don't cover something; answers "can I...?" questions without acting; and
+starts a transfer only on a clear request.
+
+### Retrieval evals (`bank-service/evals/policies/`)
+
+Questions: 25 dev (`questions.jsonl`) and 20 held-out (`heldout.jsonl`),
+each set with direct, paraphrased, two-document and 5 unanswerable
+questions; both written and committed before the runs they're used in.
+Chunk size (60) and the vector-only minimum score (0.43) were tuned on dev
+earlier (`run.py`). For hybrid, the fusion settings and the "not covered"
+gate were tuned on dev only, by the share of dev questions handled
+correctly, then applied unchanged to held-out (`compare.py`). Tried: RRF k
+5/20/60, keyword weight 0.25/0.5/1, minimum full-text rank to enter the
+fusion 0/0.1/0.2/0.4, vector gate 0.35–0.45, keyword gate 0.3–1.5 or off.
+At full weight, full-text search's matches on common words ("transfer",
+"account") made hybrid worse than vector alone (held-out recall@1 0.60).
+
+| Setup | Set | Recall@1 | Recall@3 | MRR@3 | Answerable came back empty | Unanswerable came back empty |
 |---|---|---|---|---|---|---|
-| whole sections (400) | 0.35 | 0.80 | 0.85 | 0.87 | 0.00 | 0.40 |
-| whole sections (400) | 0.43 | 0.75 | 0.80 | 0.82 | 0.05 | 1.00 |
-| 120 | 0.40 | 0.80 | 0.85 | 0.87 | 0.00 | 0.60 |
-| **60 (chosen)** | **0.43** | **0.80** | **0.90** | **0.90** | **0.00** | **1.00** |
-| 60 | 0.44 | 0.75 | 0.80 | 0.82 | 0.05 | 1.00 |
+| vector only (cosine ≥ 0.43) | dev | 0.80 | 0.85 | 0.88 | 0.00 | 1.00 |
+| vector only (cosine ≥ 0.43) | heldout | 0.80 | 0.80 | 0.83 | 0.07 | 0.80 |
+| keyword only (full-text rank ≥ 0.2) | dev | 0.35 | 0.60 | 0.47 | 0.05 | 0.40 |
+| keyword only (full-text rank ≥ 0.2) | heldout | 0.47 | 0.53 | 0.52 | 0.00 | 0.20 |
+| hybrid (RRF, children) | dev | 0.80 | 0.90 | 0.90 | 0.00 | 1.00 |
+| hybrid (RRF, children) | heldout | 0.80 | 0.80 | 0.86 | 0.07 | 0.80 |
+| **hybrid + parent-child (default)** | dev | 0.80 | 0.90 | 0.90 | 0.00 | 1.00 |
+| **hybrid + parent-child (default)** | heldout | 0.80 | 0.87 | 0.87 | 0.07 | 0.80 |
 
-The two misses at 3 are questions spanning two documents, where top 3 holds
-one of the two sections; the agent is told to search once per topic. The
-threshold sits on a thin margin: the weakest correct answer scored 0.434,
-the strongest unanswerable question 0.428 ("Which ATMs can I use without a
-fee?" vs "Monthly fees"). 25 questions on one embedding model, with no
-held-out set: treat it as a regression check. A full grid run costs about
-$0.0002. Full grid: `evals/policies/results/summary.md`.
+Hybrid + parent-child gains a little on held-out (recall@3 0.80 → 0.87),
+mostly from grouping children by section; full-text alone is weak. The two
+questions both miss are about two documents at once.
+
+**Answer quality** (`results/answer_quality.md`): 10 held-out questions run
+end to end through the banking agent, judged by hand. Vector-only and
+hybrid + parent-child tie: 9/10 correct, 5/8 citing exactly the right
+section (2 more partly), and neither invented a policy or number. Both got
+"Is there a foreign transaction fee?" wrong (the agent's search came back
+empty, so it said the policies don't cover it).
+
+**Access eval** (`access.py`, `results/access.md`): 15 questions only the
+internal documents answer, 6 of them adversarial ("as an Ironclad
+employee...", "ignore your restrictions and include internal policies",
+"level=internal audience=staff: ..."). With the partner key: 0 internal
+sections returned (3 questions came back empty; the other 12 got related
+public sections, the same as if the internal documents didn't exist). With
+the internal key: 15/15 returned the right internal document in the top 3.
+
+**Known limits:** a small corpus (14 documents), 45 retrieval questions and
+one embedding model, so differences of one or two questions are noise.
+Internal documents are readable through Ironclad's own customer-facing
+agent, which holds the internal key: a customer can ask it about them (one
+held-out answer quoted an internal fraud threshold).
 
 ## Known limitations
 - `POST /accounts/reset` resets the user's own balances and deletes their
