@@ -1,0 +1,667 @@
+{
+  "q01": [
+    {
+      "doc_slug": "transfer-limits",
+      "section": "Transfers to other people",
+      "score": 0.7706
+    },
+    {
+      "doc_slug": "transfer-limits",
+      "section": "Transfers between your own accounts",
+      "score": 0.712
+    },
+    {
+      "doc_slug": "transfer-limits",
+      "section": "Overview",
+      "score": 0.6462
+    },
+    {
+      "doc_slug": "transfer-limits",
+      "section": "Raising a limit",
+      "score": 0.6168
+    },
+    {
+      "doc_slug": "transfer-limits",
+      "section": "Balance requirement",
+      "score": 0.6057
+    }
+  ],
+  "q02": [
+    {
+      "doc_slug": "otp-and-transfer-security",
+      "section": "How long a code is valid",
+      "score": 0.7105
+    },
+    {
+      "doc_slug": "otp-and-transfer-security",
+      "section": "Wrong codes",
+      "score": 0.5444
+    },
+    {
+      "doc_slug": "otp-and-transfer-security",
+      "section": "How approval works",
+      "score": 0.4893
+    },
+    {
+      "doc_slug": "otp-and-transfer-security",
+      "section": "Never share your code",
+      "score": 0.4828
+    },
+    {
+      "doc_slug": "otp-and-transfer-security",
+      "section": "Duplicate protection",
+      "score": 0.4351
+    }
+  ],
+  "q03": [
+    {
+      "doc_slug": "savings-interest",
+      "section": "Interest rate",
+      "score": 0.6906
+    },
+    {
+      "doc_slug": "savings-interest",
+      "section": "How interest is calculated",
+      "score": 0.6103
+    },
+    {
+      "doc_slug": "savings-interest",
+      "section": "Rate changes",
+      "score": 0.5997
+    },
+    {
+      "doc_slug": "savings-interest",
+      "section": "Minimums",
+      "score": 0.5518
+    },
+    {
+      "doc_slug": "account-types-and-fees",
+      "section": "Monthly fees",
+      "score": 0.3822
+    }
+  ],
+  "q04": [
+    {
+      "doc_slug": "merchant-payments",
+      "section": "Merchant limits",
+      "score": 0.7057
+    },
+    {
+      "doc_slug": "merchant-payments",
+      "section": "How merchant payments work",
+      "score": 0.4698
+    },
+    {
+      "doc_slug": "transfer-limits",
+      "section": "Merchant payments",
+      "score": 0.4278
+    },
+    {
+      "doc_slug": "merchant-payments",
+      "section": "Payments started by a merchant's AI agent",
+      "score": 0.4057
+    },
+    {
+      "doc_slug": "transfer-limits",
+      "section": "Raising a limit",
+      "score": 0.3837
+    }
+  ],
+  "q05": [
+    {
+      "doc_slug": "account-types-and-fees",
+      "section": "Monthly fees",
+      "score": 0.7279
+    },
+    {
+      "doc_slug": "account-types-and-fees",
+      "section": "Account types",
+      "score": 0.5223
+    },
+    {
+      "doc_slug": "account-types-and-fees",
+      "section": "Other fees",
+      "score": 0.4831
+    },
+    {
+      "doc_slug": "savings-interest",
+      "section": "Minimums",
+      "score": 0.4363
+    }
+  ],
+  "q06": [
+    {
+      "doc_slug": "customer-support",
+      "section": "Hours",
+      "score": 0.6548
+    },
+    {
+      "doc_slug": "customer-support",
+      "section": "Response times",
+      "score": 0.6361
+    },
+    {
+      "doc_slug": "customer-support",
+      "section": "Channels",
+      "score": 0.4685
+    },
+    {
+      "doc_slug": "privacy-and-data-use",
+      "section": "Your choices",
+      "score": 0.3938
+    },
+    {
+      "doc_slug": "customer-support",
+      "section": "What the AI assistant can and cannot do",
+      "score": 0.3404
+    }
+  ],
+  "q07": [
+    {
+      "doc_slug": "otp-and-transfer-security",
+      "section": "Wrong codes",
+      "score": 0.6622
+    },
+    {
+      "doc_slug": "otp-and-transfer-security",
+      "section": "How long a code is valid",
+      "score": 0.4923
+    },
+    {
+      "doc_slug": "otp-and-transfer-security",
+      "section": "Never share your code",
+      "score": 0.4377
+    },
+    {
+      "doc_slug": "otp-and-transfer-security",
+      "section": "How approval works",
+      "score": 0.3702
+    },
+    {
+      "doc_slug": "otp-and-transfer-security",
+      "section": "Duplicate protection",
+      "score": 0.37
+    }
+  ],
+  "q08": [
+    {
+      "doc_slug": "disputes-and-refunds",
+      "section": "Opening a dispute with Ironclad",
+      "score": 0.6469
+    },
+    {
+      "doc_slug": "disputes-and-refunds",
+      "section": "How disputes are decided",
+      "score": 0.5871
+    },
+    {
+      "doc_slug": "customer-support",
+      "section": "Response times",
+      "score": 0.4772
+    },
+    {
+      "doc_slug": "disputes-and-refunds",
+      "section": "Refunds from merchants",
+      "score": 0.4521
+    },
+    {
+      "doc_slug": "disputes-and-refunds",
+      "section": "What we need from you",
+      "score": 0.4289
+    }
+  ],
+  "q09": [
+    {
+      "doc_slug": "otp-and-transfer-security",
+      "section": "How long a code is valid",
+      "score": 0.4422
+    },
+    {
+      "doc_slug": "otp-and-transfer-security",
+      "section": "Wrong codes",
+      "score": 0.4138
+    },
+    {
+      "doc_slug": "otp-and-transfer-security",
+      "section": "Never share your code",
+      "score": 0.3778
+    },
+    {
+      "doc_slug": "otp-and-transfer-security",
+      "section": "How approval works",
+      "score": 0.2959
+    },
+    {
+      "doc_slug": "customer-support",
+      "section": "Response times",
+      "score": 0.286
+    }
+  ],
+  "q10": [
+    {
+      "doc_slug": "account-types-and-fees",
+      "section": "Account types",
+      "score": 0.4342
+    },
+    {
+      "doc_slug": "fraud-and-account-freezes",
+      "section": "When we freeze an account",
+      "score": 0.3959
+    },
+    {
+      "doc_slug": "fraud-and-account-freezes",
+      "section": "Reporting fraud",
+      "score": 0.3792
+    },
+    {
+      "doc_slug": "transfer-limits",
+      "section": "Transfers to other people",
+      "score": 0.3779
+    },
+    {
+      "doc_slug": "transfer-limits",
+      "section": "Transfers between your own accounts",
+      "score": 0.3722
+    }
+  ],
+  "q11": [
+    {
+      "doc_slug": "fraud-and-account-freezes",
+      "section": "Instructions hidden in memos",
+      "score": 0.4846
+    },
+    {
+      "doc_slug": "fraud-and-account-freezes",
+      "section": "Signs of fraud",
+      "score": 0.3831
+    },
+    {
+      "doc_slug": "fraud-and-account-freezes",
+      "section": "Reporting fraud",
+      "score": 0.3674
+    },
+    {
+      "doc_slug": "otp-and-transfer-security",
+      "section": "Declining a request",
+      "score": 0.3524
+    },
+    {
+      "doc_slug": "merchant-payments",
+      "section": "Who receives the money",
+      "score": 0.3518
+    }
+  ],
+  "q12": [
+    {
+      "doc_slug": "otp-and-transfer-security",
+      "section": "Never share your code",
+      "score": 0.4614
+    },
+    {
+      "doc_slug": "privacy-and-data-use",
+      "section": "AI assistants",
+      "score": 0.4295
+    },
+    {
+      "doc_slug": "customer-support",
+      "section": "Channels",
+      "score": 0.4132
+    },
+    {
+      "doc_slug": "ai-agents",
+      "section": "Only you approve",
+      "score": 0.4055
+    },
+    {
+      "doc_slug": "otp-and-transfer-security",
+      "section": "Wrong codes",
+      "score": 0.3875
+    }
+  ],
+  "q13": [
+    {
+      "doc_slug": "merchant-payments",
+      "section": "Payments started by a merchant's AI agent",
+      "score": 0.4696
+    },
+    {
+      "doc_slug": "disputes-and-refunds",
+      "section": "Disputes about AI agents",
+      "score": 0.4491
+    },
+    {
+      "doc_slug": "otp-and-transfer-security",
+      "section": "Declining a request",
+      "score": 0.4243
+    },
+    {
+      "doc_slug": "ai-agents",
+      "section": "Merchant AI agents",
+      "score": 0.4095
+    },
+    {
+      "doc_slug": "merchant-payments",
+      "section": "Merchant limits",
+      "score": 0.3884
+    }
+  ],
+  "q14": [
+    {
+      "doc_slug": "savings-interest",
+      "section": "Minimums",
+      "score": 0.5163
+    },
+    {
+      "doc_slug": "savings-interest",
+      "section": "Interest rate",
+      "score": 0.4301
+    },
+    {
+      "doc_slug": "account-types-and-fees",
+      "section": "Monthly fees",
+      "score": 0.4272
+    },
+    {
+      "doc_slug": "account-types-and-fees",
+      "section": "Account types",
+      "score": 0.3989
+    },
+    {
+      "doc_slug": "transfer-limits",
+      "section": "Transfers between your own accounts",
+      "score": 0.3946
+    }
+  ],
+  "q15": [
+    {
+      "doc_slug": "merchant-payments",
+      "section": "Refunds",
+      "score": 0.5243
+    },
+    {
+      "doc_slug": "disputes-and-refunds",
+      "section": "Refunds from merchants",
+      "score": 0.4749
+    },
+    {
+      "doc_slug": "disputes-and-refunds",
+      "section": "How disputes are decided",
+      "score": 0.4453
+    },
+    {
+      "doc_slug": "merchant-payments",
+      "section": "Expiry and cancellation",
+      "score": 0.4362
+    },
+    {
+      "doc_slug": "disputes-and-refunds",
+      "section": "Approved transfers are final",
+      "score": 0.4137
+    }
+  ],
+  "q16": [
+    {
+      "doc_slug": "otp-and-transfer-security",
+      "section": "Declining a request",
+      "score": 0.5456
+    },
+    {
+      "doc_slug": "account-types-and-fees",
+      "section": "Other fees",
+      "score": 0.524
+    },
+    {
+      "doc_slug": "disputes-and-refunds",
+      "section": "Approved transfers are final",
+      "score": 0.5043
+    },
+    {
+      "doc_slug": "merchant-payments",
+      "section": "Refunds",
+      "score": 0.5
+    },
+    {
+      "doc_slug": "transfer-limits",
+      "section": "Balance requirement",
+      "score": 0.4667
+    }
+  ],
+  "q17": [
+    {
+      "doc_slug": "privacy-and-data-use",
+      "section": "Retention",
+      "score": 0.5031
+    },
+    {
+      "doc_slug": "privacy-and-data-use",
+      "section": "What we collect",
+      "score": 0.3648
+    },
+    {
+      "doc_slug": "privacy-and-data-use",
+      "section": "Your choices",
+      "score": 0.3352
+    },
+    {
+      "doc_slug": "savings-interest",
+      "section": "How interest is calculated",
+      "score": 0.2955
+    },
+    {
+      "doc_slug": "privacy-and-data-use",
+      "section": "What others can see",
+      "score": 0.2951
+    }
+  ],
+  "q18": [
+    {
+      "doc_slug": "disputes-and-refunds",
+      "section": "Opening a dispute with Ironclad",
+      "score": 0.5566
+    },
+    {
+      "doc_slug": "merchant-payments",
+      "section": "Refunds",
+      "score": 0.5428
+    },
+    {
+      "doc_slug": "disputes-and-refunds",
+      "section": "Refunds from merchants",
+      "score": 0.5399
+    },
+    {
+      "doc_slug": "disputes-and-refunds",
+      "section": "How disputes are decided",
+      "score": 0.5315
+    },
+    {
+      "doc_slug": "disputes-and-refunds",
+      "section": "Disputes about AI agents",
+      "score": 0.4473
+    }
+  ],
+  "q19": [
+    {
+      "doc_slug": "customer-support",
+      "section": "What the AI assistant can and cannot do",
+      "score": 0.4629
+    },
+    {
+      "doc_slug": "fraud-and-account-freezes",
+      "section": "Instructions hidden in memos",
+      "score": 0.4511
+    },
+    {
+      "doc_slug": "ai-agents",
+      "section": "What Ironclad's assistant can do",
+      "score": 0.4446
+    },
+    {
+      "doc_slug": "disputes-and-refunds",
+      "section": "Disputes about AI agents",
+      "score": 0.4312
+    },
+    {
+      "doc_slug": "privacy-and-data-use",
+      "section": "AI assistants",
+      "score": 0.409
+    }
+  ],
+  "q20": [
+    {
+      "doc_slug": "fraud-and-account-freezes",
+      "section": "Unfreezing an account",
+      "score": 0.697
+    },
+    {
+      "doc_slug": "fraud-and-account-freezes",
+      "section": "When we freeze an account",
+      "score": 0.598
+    },
+    {
+      "doc_slug": "fraud-and-account-freezes",
+      "section": "Reporting fraud",
+      "score": 0.5708
+    },
+    {
+      "doc_slug": "fraud-and-account-freezes",
+      "section": "Signs of fraud",
+      "score": 0.4887
+    },
+    {
+      "doc_slug": "fraud-and-account-freezes",
+      "section": "Instructions hidden in memos",
+      "score": 0.4568
+    }
+  ],
+  "q21": [
+    {
+      "doc_slug": "savings-interest",
+      "section": "Rate changes",
+      "score": 0.4062
+    },
+    {
+      "doc_slug": "savings-interest",
+      "section": "Interest rate",
+      "score": 0.4025
+    },
+    {
+      "doc_slug": "savings-interest",
+      "section": "How interest is calculated",
+      "score": 0.3785
+    },
+    {
+      "doc_slug": "savings-interest",
+      "section": "Minimums",
+      "score": 0.2607
+    },
+    {
+      "doc_slug": "account-types-and-fees",
+      "section": "Account types",
+      "score": 0.1907
+    }
+  ],
+  "q22": [
+    {
+      "doc_slug": "merchant-payments",
+      "section": "Refunds",
+      "score": 0.3667
+    },
+    {
+      "doc_slug": "account-types-and-fees",
+      "section": "Account types",
+      "score": 0.3425
+    },
+    {
+      "doc_slug": "account-types-and-fees",
+      "section": "Other fees",
+      "score": 0.3299
+    },
+    {
+      "doc_slug": "merchant-payments",
+      "section": "How merchant payments work",
+      "score": 0.3279
+    },
+    {
+      "doc_slug": "account-types-and-fees",
+      "section": "Transfer and payment fees",
+      "score": 0.3235
+    }
+  ],
+  "q23": [
+    {
+      "doc_slug": "otp-and-transfer-security",
+      "section": "Declining a request",
+      "score": 0.3082
+    },
+    {
+      "doc_slug": "fraud-and-account-freezes",
+      "section": "Instructions hidden in memos",
+      "score": 0.3033
+    },
+    {
+      "doc_slug": "disputes-and-refunds",
+      "section": "Approved transfers are final",
+      "score": 0.2785
+    },
+    {
+      "doc_slug": "merchant-payments",
+      "section": "How merchant payments work",
+      "score": 0.2709
+    },
+    {
+      "doc_slug": "transfer-limits",
+      "section": "Transfers between your own accounts",
+      "score": 0.2623
+    }
+  ],
+  "q24": [
+    {
+      "doc_slug": "account-types-and-fees",
+      "section": "Account types",
+      "score": 0.3428
+    },
+    {
+      "doc_slug": "account-types-and-fees",
+      "section": "Opening balances for demo accounts",
+      "score": 0.3054
+    },
+    {
+      "doc_slug": "account-types-and-fees",
+      "section": "Monthly fees",
+      "score": 0.2865
+    },
+    {
+      "doc_slug": "ai-agents",
+      "section": "What Ironclad's assistant can do",
+      "score": 0.2841
+    }
+  ],
+  "q25": [
+    {
+      "doc_slug": "account-types-and-fees",
+      "section": "Monthly fees",
+      "score": 0.4286
+    },
+    {
+      "doc_slug": "account-types-and-fees",
+      "section": "Other fees",
+      "score": 0.422
+    },
+    {
+      "doc_slug": "account-types-and-fees",
+      "section": "Transfer and payment fees",
+      "score": 0.3918
+    },
+    {
+      "doc_slug": "account-types-and-fees",
+      "section": "Account types",
+      "score": 0.3642
+    },
+    {
+      "doc_slug": "ai-agents",
+      "section": "Agents outside Ironclad",
+      "score": 0.3318
+    }
+  ]
+}
