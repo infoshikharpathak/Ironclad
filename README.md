@@ -202,7 +202,7 @@ Keys are `pk_` + 32 random bytes, stored as SHA-256:
 
 ```bash
 python -m app.cli policy-keys create ironclad-banking-agent --levels public
-python -m app.cli policy-keys create chat-hub-partner --levels public
+python -m app.cli policy-keys create chathub --levels public
 python -m app.cli policy-keys create ironclad-internal --levels public,internal
 python -m app.cli policy-keys list | revoke <name>
 ```
@@ -210,8 +210,10 @@ python -m app.cli policy-keys list | revoke <name>
 Each caller gets its own key, so each can be revoked on its own. The banking
 agent talks to customers, so its key (`IRONCLAD_POLICY_KEY`, sent by Anvil as
 the ironclad app's auth header: never in tool params, model context or
-traces) reads **public** policies only. A partner key exists for the future
-chat hub; nothing outside Ironclad calls search yet.
+traces) reads **public** policies only. The chat hub (a separate app) has
+its own public-only key, `chathub`, which it sends itself through a bastion
+grant of the search tool; it has no merchant key, so it can never call the
+payments API, and no bank tools.
 
 **Internal policies are only reachable with the internal key, which no
 customer-facing agent has.** It exists for staff tooling; an internal ops
