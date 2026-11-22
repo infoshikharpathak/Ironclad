@@ -7,11 +7,16 @@
 apps:
   ironclad:
     base_url: "http://localhost:8001"
-    # If the bank service starts requiring a token, Anvil injects it per call:
-    # auth:
-    #   header: Authorization
-    #   secret_env: IRONCLAD_BANK_TOKEN
-    #   prefix: "Bearer "
+    # Anvil sends this on every call to the bank, read from the env var at
+    # call time and redacted from responses: never in tool params, model
+    # context or traces. The bank uses it for GET /policies/search, where the
+    # key decides which policy levels (public, internal) are searched. This
+    # service holds the internal key: 'python -m app.cli policy-keys create
+    # ironclad-agent-service --levels public,internal' in bank-service.
+    auth:
+      header: Authorization
+      secret_env: IRONCLAD_POLICY_KEY
+      prefix: "Bearer "
     # Registry callers for this app (store the SHA-256 of the key, never the key):
     # api_keys:
     #   ironclad-agent-service: "<sha256 hex>"

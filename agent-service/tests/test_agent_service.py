@@ -318,3 +318,20 @@ async def test_can_i_question_is_answered_not_acted_on(service):
     assert "/transfers/initiate" not in bank.paths()
     system = llm.requests[0][0]["content"]
     assert "Answer questions; act only on requests." in system and '"Can I send $3,000 to Bob?"' in system
+
+
+async def test_policy_key_goes_in_a_header_never_in_params_or_traces(service):
+    import os
+
+    client, llm, bank = service
+    key = os.environ["IRONCLAD_POLICY_KEY"]
+    msg = "What are the fraud review times?"
+    llm.plans[msg] = [{"tool": "search_policies", "args": {"q": "fraud review times"}}, {"text": "Within 30 minutes."}]
+    await chat(client, msg, "tab-key-hdr")
+    (req,) = bank.requests
+    assert req.headers["authorization"] == f"Bearer {key}"
+    assert key not in str(req.url)
+    traces = (await client.get("/traces", params={"session_id": "tab-key-hdr"})).json()
+    assert key not in json.dumps(traces) and key not in json.dumps(llm.requests)
+    export = (await client.get("/traces/export", params={"session_id": "tab-key-hdr"})).text
+    assert key not in export

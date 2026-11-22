@@ -51,6 +51,8 @@ services:
       # The YAML's base_url is localhost:8001, which inside this container is
       # the container itself. Point the agent's tools at the bank service.
       IRONCLAD_BASE_URL: http://bank-service:8001
+      # Policy-access key (public + internal) for search_policies; see anvil-ironclad.yaml.
+      IRONCLAD_POLICY_KEY: ${IRONCLAD_POLICY_KEY}
     volumes:
       - ./anvil-ironclad.yaml:/app/anvil-ironclad.yaml:ro
     ports:

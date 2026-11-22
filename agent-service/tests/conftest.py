@@ -13,6 +13,7 @@ from bastion.classifier import is_classifier_request
 from openai.types.chat import ChatCompletion
 
 os.environ.setdefault("OPENAI_API_KEY", "dummy-key-for-tests")
+os.environ.setdefault("IRONCLAD_POLICY_KEY", "pk_test_internal_key")
 os.environ.pop("OPENAI_MODEL", None)
 
 
