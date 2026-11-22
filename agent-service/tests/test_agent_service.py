@@ -297,3 +297,24 @@ async def test_search_policies_schema_blocks_bad_params(service, args, problem):
     (seen,) = llm.tool_results_seen(msg)
     assert seen["correction"]["violation"] == "invalid_params" and problem in seen["correction"]["message"]
     assert bank.requests == []
+
+
+CAN_I = "Can I send $3,000 to Bob today?"
+
+
+async def test_can_i_question_is_answered_not_acted_on(service):
+    """Live regression (trace 6f98dd78): the model started a $3,000 transfer when
+    the user only asked whether they could. The instructions now say a question
+    gets an answer; with a model that follows them, no transfer is started."""
+    client, llm, bank = service
+    llm.plans[CAN_I] = [
+        {"tool": "get_accounts", "args": {}},
+        {"tool": "search_policies", "args": {"q": "limit for transfers to other people"}},
+        {"text": "Yes: Checking has $2,400, and up to $5,000 per transfer is allowed (Transfer Limits, "
+                 "Transfers to other people). Want me to start the transfer?"},
+    ]
+    body = await chat(client, CAN_I, "tab-can-i")
+    assert [c["tool"] for c in body["tool_calls"]] == ["get_accounts", "search_policies"]
+    assert "/transfers/initiate" not in bank.paths()
+    system = llm.requests[0][0]["content"]
+    assert "Answer questions; act only on requests." in system and '"Can I send $3,000 to Bob?"' in system
