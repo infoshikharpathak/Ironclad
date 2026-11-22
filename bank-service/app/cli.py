@@ -1,7 +1,10 @@
 """Ironclad bank admin CLI. Run from bank-service/ (uses DATABASE_URL):
 
     python -m app.cli migrate
-        Apply db/002_merchants.sql to an existing database (idempotent).
+        Apply db/002_merchants.sql and db/003_policies.sql to an existing
+        database (idempotent).
+    python -m app.cli index-policies [--dry-run]
+        Chunk bank-service/policies/*.md, embed changed chunks, drop removed ones.
     python -m app.cli merchants list
     python -m app.cli merchants create <merchant_id> "<Display Name>" --limit 200 [--agent-payments]
         Registers a merchant with its own settlement account and prints its key once.
@@ -24,7 +27,8 @@ import asyncpg
 from . import config
 from .services import merchants as merchant_keys
 
-MIGRATION = Path(__file__).resolve().parents[2] / "db" / "002_merchants.sql"
+DB_DIR = Path(__file__).resolve().parents[2] / "db"
+MIGRATIONS = ["002_merchants.sql", "003_policies.sql"]  # init.sql is the base schema
 _ID = re.compile(r"^[a-z][a-z0-9_]{1,39}$")
 
 
@@ -35,10 +39,11 @@ async def _connect() -> asyncpg.Connection:
 async def migrate() -> None:
     conn = await _connect()
     try:
-        await conn.execute(MIGRATION.read_text())
+        for name in MIGRATIONS:
+            await conn.execute((DB_DIR / name).read_text())
+            print(f"Applied {name}")
     finally:
         await conn.close()
-    print(f"Applied {MIGRATION.name}")
 
 
 async def list_merchants() -> None:
@@ -103,6 +108,28 @@ async def set_status(merchant_id: str, status: str) -> None:
     print(f"{merchant_id}: {status}")
 
 
+async def index_policies(dry_run: bool, max_tokens: int | None) -> None:
+    from .policies import chunking, embeddings, store
+
+    chunks = chunking.load_policies(max_tokens=max_tokens or chunking.DEFAULT_MAX_TOKENS)
+    embedder = embeddings.default_embedder()
+    if embedder is None:
+        if not dry_run:
+            sys.exit("OPENAI_API_KEY is not set (needed to embed the policies)")
+        embedder = embeddings.FakeEmbedder()  # only hashes are compared in a dry run
+    conn = await _connect()
+    try:
+        report = await store.index_chunks(conn, chunks, embedder, dry_run=dry_run)
+    finally:
+        await conn.close()
+    docs = len({c.doc_slug for c in chunks})
+    verb = "would embed" if dry_run else "embedded"
+    print(f"{report.total} chunks from {docs} documents: {verb} {report.embedded}, "
+          f"{report.unchanged} unchanged, {'would remove' if dry_run else 'removed'} {report.removed}")
+    if not dry_run:
+        print(f"Embedding: {embedder.model}, {report.tokens} tokens, cost ${report.cost_usd}")
+
+
 def _print_key(merchant_id: str, key: str) -> None:
     print(f"Merchant key for {merchant_id} (shown once; only its hash is stored):")
     print(key)
@@ -111,7 +138,11 @@ def _print_key(merchant_id: str, key: str) -> None:
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="python -m app.cli", description="Ironclad bank admin")
     sub = parser.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("migrate", help="apply db/002_merchants.sql (idempotent)")
+    sub.add_parser("migrate", help="apply db/002_merchants.sql and db/003_policies.sql (idempotent)")
+    ix = sub.add_parser("index-policies", help="embed bank-service/policies/*.md into policy_chunks")
+    ix.add_argument("--dry-run", action="store_true", help="only report what would change")
+    ix.add_argument("--max-tokens", type=int, default=None,
+                    help="split sections longer than this (est. tokens; default chunking.DEFAULT_MAX_TOKENS)")
     m = sub.add_parser("merchants", help="manage merchants").add_subparsers(dest="action", required=True)
     m.add_parser("list")
     c = m.add_parser("create")
@@ -128,6 +159,8 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.cmd == "migrate":
         coro = migrate()
+    elif args.cmd == "index-policies":
+        coro = index_policies(args.dry_run, args.max_tokens)
     elif args.action == "list":
         coro = list_merchants()
     elif args.action == "create":

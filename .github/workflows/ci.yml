@@ -37,9 +37,10 @@ jobs:
   bank-service:
     runs-on: ubuntu-latest
     services:
-      # The payments tests run on real Postgres, each in a throwaway schema.
+      # The payments and policy tests run on real Postgres (with pgvector),
+      # each in a throwaway schema.
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg18
         env:
           POSTGRES_USER: anvil
           POSTGRES_PASSWORD: devpassword
