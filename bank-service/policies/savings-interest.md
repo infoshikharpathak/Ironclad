@@ -1,3 +1,7 @@
+---
+level: public
+---
+
 # Savings Interest
 
 Effective date: 2026-09-01

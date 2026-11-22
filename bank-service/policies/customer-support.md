@@ -1,3 +1,7 @@
+---
+level: public
+---
+
 # Customer Support
 
 Effective date: 2026-10-01

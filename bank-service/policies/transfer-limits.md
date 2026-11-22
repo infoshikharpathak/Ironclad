@@ -1,3 +1,7 @@
+---
+level: public
+---
+
 # Transfer Limits
 
 Effective date: 2026-10-01

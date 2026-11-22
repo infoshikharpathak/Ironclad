@@ -20,6 +20,8 @@ CHARS_PER_TOKEN = 4
 DEFAULT_MAX_TOKENS = 60
 DEFAULT_OVERLAP_TOKENS = 10
 
+LEVELS = ("public", "internal")
+_FRONT_MATTER = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
 _EFFECTIVE = re.compile(r"^Effective date:\s*(\d{4}-\d{2}-\d{2})\s*$", re.MULTILINE)
 
 
@@ -32,6 +34,7 @@ class Chunk:
     effective_date: date | None
     content: str
     section_content: str = ""  # the whole ## section this chunk belongs to (its parent)
+    level: str = "public"  # the document's access level (front matter); every section shares it
 
     @property
     def id(self) -> str:
@@ -43,14 +46,16 @@ class Chunk:
 
     def section_hash(self) -> str:
         return hashlib.sha256(
-            f"{self.doc_title}\n{self.section}\n{self.effective_date}\n{self.section_content}".encode()).hexdigest()
+            f"{self.level}\n{self.doc_title}\n{self.section}\n{self.effective_date}\n{self.section_content}".encode()
+        ).hexdigest()
 
     def embedding_text(self) -> str:
         """What gets embedded: the title and section give the content context."""
         return f"{self.doc_title}: {self.section}\n\n{self.content}"
 
     def content_hash(self, model: str) -> str:
-        return hashlib.sha256(f"{model}\n{self.embedding_text()}".encode()).hexdigest()
+        # The level is part of it, so changing a document's level re-indexes it.
+        return hashlib.sha256(f"{model}\n{self.level}\n{self.embedding_text()}".encode()).hexdigest()
 
 
 def estimate_tokens(text: str) -> int:
@@ -63,6 +68,8 @@ def slugify(text: str) -> str:
 
 def parse_document(slug: str, markdown: str, *, max_tokens: int = DEFAULT_MAX_TOKENS,
                    overlap_tokens: int = DEFAULT_OVERLAP_TOKENS) -> list[Chunk]:
+    level = parse_level(slug, markdown)
+    markdown = _FRONT_MATTER.sub("", markdown, count=1)
     title_match = re.search(r"^# (.+)$", markdown, re.MULTILINE)
     if title_match is None:
         raise ValueError(f"policy {slug!r} has no '# Title' line")
@@ -73,8 +80,19 @@ def parse_document(slug: str, markdown: str, *, max_tokens: int = DEFAULT_MAX_TO
     chunks: list[Chunk] = []
     for section, body in _sections(markdown):
         for i, piece in enumerate(split_text(body, max_tokens, overlap_tokens)):
-            chunks.append(Chunk(slug, title, section, i, effective, piece, body))
+            chunks.append(Chunk(slug, title, section, i, effective, piece, body, level))
     return chunks
+
+
+def parse_level(slug: str, markdown: str) -> str:
+    """The document's level from its front matter. Required: a document
+    without one is an error, never silently public."""
+    match = _FRONT_MATTER.match(markdown)
+    fields = dict(re.findall(r"^(\w+):\s*(.+?)\s*$", match.group(1), re.MULTILINE)) if match else {}
+    level = fields.get("level")
+    if level not in LEVELS:
+        raise ValueError(f"policy {slug!r}: front matter must set level to one of {LEVELS} (got {level!r})")
+    return level
 
 
 def load_policies(directory: Path = POLICIES_DIR, **kwargs) -> list[Chunk]:

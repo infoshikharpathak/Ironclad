@@ -1,3 +1,7 @@
+---
+level: public
+---
+
 # Disputes and Refunds
 
 Effective date: 2026-10-01

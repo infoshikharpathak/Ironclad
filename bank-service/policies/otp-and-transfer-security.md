@@ -1,3 +1,7 @@
+---
+level: public
+---
+
 # OTP and Transfer Security
 
 Effective date: 2026-10-01

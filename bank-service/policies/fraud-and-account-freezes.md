@@ -1,3 +1,7 @@
+---
+level: public
+---
+
 # Fraud and Account Freezes
 
 Effective date: 2026-10-01

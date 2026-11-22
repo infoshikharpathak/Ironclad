@@ -1,3 +1,7 @@
+---
+level: public
+---
+
 # AI Agents at Ironclad
 
 Effective date: 2026-11-01

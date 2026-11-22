@@ -1,3 +1,7 @@
+---
+level: public
+---
+
 # Merchant Payments
 
 Effective date: 2026-11-01

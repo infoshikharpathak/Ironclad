@@ -1,3 +1,7 @@
+---
+level: public
+---
+
 # Account Types and Fees
 
 Effective date: 2026-10-01
