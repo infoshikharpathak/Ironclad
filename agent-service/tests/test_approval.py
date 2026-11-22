@@ -109,3 +109,13 @@ async def test_injection_named_payee_withheld_without_host_data(service, monkeyp
     (recent,) = [r for r in bank.requests if r.url.path == "/transfers/flag-recent"]
     sent = json.loads(recent.content)
     assert sent["user_id"] == "demo_user" and sent["reason"] == "response_withheld" and sent["since"]
+
+
+def test_own_account_line_names_the_account():
+    line = approval.approved_line({"amount": 200, "to_account": "acc_demo_user_savings", "to_name": "Savings"})
+    assert line.startswith("Transfer of $200.00 to your Savings account is waiting for your approval.")
+
+
+def test_account_id_keeps_only_id_characters():
+    line = approval.approved_line({"amount": 5, "to_account": "ACC-1_2 <b>", "to_name": ""})
+    assert "to ACC-1_2b is waiting" in line

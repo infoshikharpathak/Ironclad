@@ -44,13 +44,21 @@ def money(amount: Any) -> str | None:
         return None
 
 
+_ACCOUNT = re.compile(r"[^A-Za-z0-9_\-]")
+
+
 def approved_line(data: dict) -> str | None:
     amount = money(data.get("amount"))
-    account = clean(data.get("to_account"), ACCOUNT_MAX)
+    # Account IDs are the bank's own (ACC-10043-CHK, acc_demo_user_savings):
+    # keep only ID characters, underscores included.
+    account = _ACCOUNT.sub("", str(data.get("to_account") or ""))[:ACCOUNT_MAX]
     if amount is None or not account:
         return None
     name = clean(data.get("to_name"), NAME_MAX)
-    payee = f"{name} ({account})" if name else account
+    if account.startswith("acc_") and name:  # the user's own account: "your Savings account"
+        payee = f"your {name} account"
+    else:
+        payee = f"{name} ({account})" if name else account
     return (f"Transfer of {amount} to {payee} is waiting for your approval. "
             "Enter the OTP shown in your Ironclad app.")
 
