@@ -242,6 +242,12 @@ for it." Confirm and decline work as usual. The fallback line says "...
 initiate_transfer created a pending transfer. Check the details carefully
 before approving it in Ironclad." The trace records `flagged: [ids]`.
 
+**Rule: every tool that changes data needs the user's approval**, either
+an OTP (a transfer here) or a deterministic check before the call runs (see
+FoodDash's `update_address` and `cancel_order`). The banking agent's only
+data-changing tool, `initiate_transfer`, needs the OTP; it may run only
+after `get_accounts` or `lookup_account` (`requires_any`).
+
 **Requested transfers aren't flagged.** When the output classifier labels
 a reply `unrequested_action`, bastion asks the agent service, for each
 transfer the turn started, whether the user asked for it
