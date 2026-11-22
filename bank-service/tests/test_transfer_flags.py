@@ -83,3 +83,24 @@ async def test_merchant_flags_its_own_payment_request(fooddash):  # noqa: F811
     assert any(e["type"] == "transfer_flagged" and e["data"]["transfer_id"] == pid for _, e in pushed)
     r = await client.post(f"/payments/requests/{pid}/flag", json={"reason": REASON})
     assert r.status_code == 401
+
+
+async def test_initiate_returns_the_payee_name(bank):
+    client, _, _ = bank
+    r = await client.post("/transfers/initiate", json={
+        "user_id": "demo_user", "from_account": CHK, "to_account": BOB, "amount": 5, "initiated_by": "agent"})
+    assert r.json()["to_name"] == "Bob Smith"
+
+
+async def test_flag_recent_flags_only_this_turns_pending_agent_transfers(bank):
+    from datetime import datetime, timedelta, timezone
+
+    client, pool, _ = bank
+    old = await start(client)
+    await pool.execute("UPDATE transactions SET created_at = now() - interval '1 hour' WHERE id = $1", old)
+    since = (datetime.now(timezone.utc) - timedelta(seconds=5)).isoformat()
+    new = await start(client)
+    r = await client.post("/transfers/flag-recent", json={"user_id": "demo_user", "since": since, "reason": "response_withheld"})
+    assert r.json() == {"flagged": [new]}
+    p = await pending(client)
+    assert p[new]["flagged_by_output_scan"] is True and p[old]["flagged_by_output_scan"] is False

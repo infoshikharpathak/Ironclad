@@ -78,6 +78,10 @@ class TransferInitiateResponse(BaseModel):
     amount: float
     from_account: str
     to_account: str
+    # The payee's display name from the directory (COALESCE(owner_name, name),
+    # as /pending shows it). Anyone can set their own, so callers must treat
+    # it as untrusted text.
+    to_name: str | None = None
     # Deliberately no otp_code. Whoever calls /initiate (possibly an AI agent)
     # must never receive the code: the user gets it only on the dashboard
     # (the WebSocket otp_required push, or GET /transfers/pending), so only

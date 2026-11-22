@@ -107,6 +107,8 @@ async def initiate_transfer(body: TransferInitiateRequest):
     if to_row is None:
         raise account_not_found(body.to_account)
 
+    to_name = to_row["owner_name"] or to_row["name"]
+
     # Sufficient balance (advisory — the real guard is the CHECK constraint + ledger lock)
     if from_row["balance"] < body.amount:
         raise BankError(
@@ -129,6 +131,7 @@ async def initiate_transfer(body: TransferInitiateRequest):
                 amount=float(existing["amount"]),
                 from_account=existing["from_account"],
                 to_account=existing["to_account"],
+                to_name=to_name if existing["to_account"] == body.to_account else None,
                 expires_at=existing["otp_expires_at"],
                 idempotent_replay=True,
             )
@@ -167,7 +170,7 @@ async def initiate_transfer(body: TransferInitiateRequest):
     # This (and GET /transfers/pending) is the ONLY way the code leaves the
     # bank: the /initiate response below never contains it, because the
     # caller may be an AI agent.
-    to_owner = to_row.get("owner_name") or to_row["name"]
+    to_owner = to_name
     await manager.send_to_user(
         body.user_id,
         {
@@ -193,6 +196,7 @@ async def initiate_transfer(body: TransferInitiateRequest):
         amount=float(body.amount),
         from_account=body.from_account,
         to_account=body.to_account,
+        to_name=to_name,
         expires_at=expires_at,
     )
 
@@ -388,6 +392,27 @@ async def flag_pending(pool, row, reason: str) -> dict:
         "data": {"transfer_id": row["id"], "flagged_by_output_scan": True, "flag_reason": reason},
     })
     return {"transfer_id": row["id"], "status": updated["status"], "flagged_by_output_scan": True}
+
+
+class FlagRecentRequest(BaseModel):
+    user_id: str
+    since: datetime
+    reason: str = Field(min_length=1, max_length=500)
+
+
+@router.post("/flag-recent")
+async def flag_recent_transfers(body: FlagRecentRequest):
+    """Flag every pending agent-started transfer this user has had since
+    *since*. For when the agent service can't tell which transfer a turn
+    created (its response was withheld): all of them get the warning."""
+    pool = get_pool()
+    rows = await pool.fetch(
+        "SELECT * FROM transactions WHERE user_id = $1 AND status = 'pending_otp' "
+        "AND initiated_by = 'agent' AND created_at >= $2 ORDER BY created_at",
+        body.user_id, body.since,
+    )
+    flagged = [(await flag_pending(pool, row, body.reason))["transfer_id"] for row in rows]
+    return {"flagged": flagged}
 
 
 @router.post("/{transfer_id}/flag")
