@@ -116,13 +116,16 @@ apps:
         response_schema:
           required_fields: ["accounts"]
 
+      # Read-only, but NOT trusted: a merchant payment's description is
+      # written by the merchant, and this returns it. (Anvil now honors a
+      # tool's own trust; before, this ran as untrusted via default_trust.)
       get_transfer_status:
         path: "/transfers/{transfer_id}/status"
         method: GET
         description: "Check the current status of a transfer."
-        trust: trusted
+        trust: untrusted
         timeout: 5
-        injection_scanning: false
+        injection_scanning: true
         parameters:
           type: object
           properties:
