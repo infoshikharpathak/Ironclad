@@ -34,12 +34,16 @@ class StubLLM:
     def __init__(self, plans: dict[str, list[dict]]):
         self.plans = plans
         self.requests: list[list] = []
+        self.flag_words: list[str] = []  # the classifier flags text containing any of these
         self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
 
     async def _create(self, **kwargs):
         msgs = kwargs["messages"]
         if is_classifier_request(msgs):  # Anvil's injection scan, via the SDK
-            return _completion({"role": "assistant", "content": '{"injection": false}'}, "stop")
+            text = (_content(msgs[-1]) or "").lower()
+            hit = next((w for w in self.flag_words if w in text), None)
+            verdict = {"injection": True, "pattern": f"says {hit}"} if hit else {"injection": False}
+            return _completion({"role": "assistant", "content": json.dumps(verdict)}, "stop")
         self.requests.append(msgs)
         last_user = max(i for i, m in enumerate(msgs) if _role(m) == "user")
         user_text = _content(msgs[last_user])
@@ -82,6 +86,7 @@ class StubBank:
         self.requests: list[httpx.Request] = []
         self.leak_otp = False  # behave like an old bank that returned the code
         self.memo = "Lunch"     # memo on the incoming payment get_transactions returns
+        self.cancel_fails = False
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -105,6 +110,10 @@ class StubBank:
                  "effective_date": "2026-10-01", "score": 0.77,
                  "content": "Transfers to another person are limited to $5,000.00 per transfer and $10,000.00 per day."},
             ]})
+        if path.startswith("/transfers/") and path.endswith("/cancel"):
+            if self.cancel_fails:
+                return httpx.Response(500, json={"error": "BOOM"})
+            return httpx.Response(200, json={"transfer_id": path.split("/")[2], "status": "cancelled"})
         if path == "/transfers/initiate":
             body = json.loads(request.content)
             out = {"transfer_id": "tr-1", "status": "pending_otp", "amount": body["amount"]}

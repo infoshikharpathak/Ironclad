@@ -194,14 +194,11 @@ apps:
               type: string
               maxLength: 200
               description: "Transfer description / memo"
-            idempotency_key:
-              type: string
-              minLength: 1
-              maxLength: 128
-              description: "Unique key to prevent duplicate transfers"
             initiated_by:
               type: string
               description: "Who initiated: 'agent' for AI-initiated transfers"
+          # No idempotency_key: the agent service sets a fresh one per transfer,
+          # so a key from the model is rejected by Anvil's param check.
           required: [user_id, from_account, to_account, amount]
         response_schema:
           required_fields: ["transfer_id", "status", "amount"]

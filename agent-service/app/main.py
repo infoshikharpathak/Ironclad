@@ -14,6 +14,7 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import Any
 
+import httpx
 import yaml
 from dotenv import load_dotenv
 from fastapi import FastAPI, Query
@@ -51,8 +52,39 @@ def prepare_tool_call(ctx: Any, tool: str, params: dict[str, Any]) -> dict[str, 
         params["user_id"] = BANK_USER_ID
     if tool == "initiate_transfer":
         params["initiated_by"] = "agent"
-        params.setdefault("idempotency_key", f"agent_{uuid.uuid4().hex[:12]}")
+        # Always the service's, one per transfer: the tool's schema doesn't
+        # declare idempotency_key, so Anvil blocks a model that sends one (a
+        # reused key would replay an earlier transfer instead of starting one).
+        params["idempotency_key"] = f"agent_{uuid.uuid4().hex}"
     return params
+
+
+def make_undo(bank_url, transport: Any = None):
+    """on_output_blocked hook: when Anvil blocks the agent's reply, cancel
+    the pending transfers that turn started, so nothing the user never saw
+    is left waiting for an OTP. *bank_url* is a callable (the base URL can
+    change with a remote bundle)."""
+
+    async def undo(agent_id: str, tool_calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        out = []
+        for call in tool_calls:
+            data = call.get("response") if isinstance(call.get("response"), dict) else {}
+            if call.get("tool") != "initiate_transfer" or not call.get("success") or data.get("status") != "pending_otp":
+                continue
+            transfer_id = data["transfer_id"]
+            try:
+                async with httpx.AsyncClient(timeout=10, transport=transport) as client:
+                    resp = await client.post(f"{bank_url()}/transfers/{transfer_id}/cancel",
+                                             json={"user_id": BANK_USER_ID})
+                ok = resp.status_code < 400
+            except httpx.HTTPError:
+                ok = False
+            (logger.info if ok else logger.error)(
+                "Blocked reply: %s pending transfer %s", "cancelled" if ok else "could not cancel", transfer_id)
+            out.append({"tool": "initiate_transfer", "id": transfer_id, "what": "a pending transfer", "cancelled": ok})
+        return out
+
+    return undo
 
 
 def build_platform(**platform_kwargs: Any) -> Platform:
@@ -70,6 +102,11 @@ def build_platform(**platform_kwargs: Any) -> Platform:
     """
     url, key = os.getenv("BASTION_URL"), os.getenv("BASTION_KEY")
     bank_url = os.getenv("IRONCLAD_BASE_URL")
+    holder: dict[str, Platform] = {}
+    platform_kwargs.setdefault("on_output_blocked", make_undo(
+        lambda: holder["platform"].config.platform.apps[APP]["base_url"].rstrip("/"),
+        platform_kwargs.get("http_transport"),
+    ))
     if url and key:
         if bank_url:
             logger.warning("IRONCLAD_BASE_URL is ignored in remote mode: set the ironclad app's "
@@ -82,13 +119,16 @@ def build_platform(**platform_kwargs: Any) -> Platform:
         if platform.app != APP:
             raise RuntimeError(f"BASTION_KEY belongs to app {platform.app!r}, not {APP!r}.")
         logger.info("bastion remote mode: %s, revision %s", url, platform.bundle_revision)
+        holder["platform"] = platform
         return platform
     raw = yaml.safe_load(open(CONFIG_PATH))
     if bank_url:  # e.g. http://bank-service:8001 in docker-compose; the YAML says localhost
         raw["apps"][APP]["base_url"] = bank_url.rstrip("/")
     if os.getenv("OPENAI_MODEL"):  # local mode only; in remote mode the service decides the model
         raw["agents"][AGENT_ID]["model"] = os.environ["OPENAI_MODEL"]
-    return Platform(load_config(raw), app=APP, prepare_tool_call=prepare_tool_call, **platform_kwargs)
+    platform = Platform(load_config(raw), app=APP, prepare_tool_call=prepare_tool_call, **platform_kwargs)
+    holder["platform"] = platform
+    return platform
 
 
 @asynccontextmanager
