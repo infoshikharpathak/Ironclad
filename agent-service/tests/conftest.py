@@ -99,6 +99,12 @@ class StubBank:
             number = path.rsplit("/", 1)[1]
             return httpx.Response(200, json={"account_number": number, "owner_name": "Ana Silva",
                                              "account_type": "checking", "currency": "USD"})
+        if path == "/policies/search":
+            return httpx.Response(200, json={"query": request.url.params["q"], "min_score": 0.43, "results": [
+                {"doc_slug": "transfer-limits", "doc_title": "Transfer Limits", "section": "Transfers to other people",
+                 "effective_date": "2026-10-01", "score": 0.77,
+                 "content": "Transfers to another person are limited to $5,000.00 per transfer and $10,000.00 per day."},
+            ]})
         if path == "/transfers/initiate":
             body = json.loads(request.content)
             out = {"transfer_id": "tr-1", "status": "pending_otp", "amount": body["amount"]}

@@ -4,6 +4,8 @@ the web UI depends on."""
 import asyncio
 import json
 
+import pytest
+
 S1_LOOKUP = "Show my accounts and check recipient ACC-777."
 S1_SEND = "Send $50 to ACC-777."
 LOOKUP_PLAN = [
@@ -262,4 +264,36 @@ async def test_params_outside_the_tool_schema_never_reach_the_bank(service):
     assert first["correction"]["violation"] == "invalid_params"
     assert "limit: must be at most 100" in first["correction"]["message"]
     assert "pin: unknown field" in second["correction"]["message"]
+    assert bank.requests == []
+
+
+async def test_search_policies_reaches_the_bank_with_valid_params(service):
+    client, llm, bank = service
+    msg = "What's the daily limit for sending money to people?"
+    llm.plans[msg] = [{"tool": "search_policies", "args": {"q": "daily limit for transfers to other people", "top_k": 2}},
+                      {"text": "Up to $10,000.00 per day (Transfer Limits, Transfers to other people)."}]
+    body = await chat(client, msg, "tab-policy")
+    (call,) = body["tool_calls"]
+    assert call["tool"] == "search_policies" and call["blocked"] is False
+    assert call["result"]["results"][0]["section"] == "Transfers to other people"
+    (req,) = bank.requests
+    assert req.url.path == "/policies/search"
+    assert dict(req.url.params) == {"q": "daily limit for transfers to other people", "top_k": "2"}  # no user_id added
+
+
+@pytest.mark.parametrize("args,problem", [
+    ({"q": "hi"}, "q: shorter than 3 characters"),
+    ({"q": "x" * 301}, "q: longer than 300 characters"),
+    ({"q": "fees", "top_k": 9}, "top_k: must be at most 5"),
+    ({"q": "fees", "top_k": 0}, "top_k: must be at least 1"),
+    ({"q": "fees", "category": "all"}, "category: unknown field"),
+    ({"top_k": 2}, "q: required field is missing"),
+])
+async def test_search_policies_schema_blocks_bad_params(service, args, problem):
+    client, llm, bank = service
+    msg = f"policy question {problem}"
+    llm.plans[msg] = [{"tool": "search_policies", "args": args}, {"text": "Let me rephrase."}]
+    await chat(client, msg, f"tab-bad-{abs(hash(problem))}")
+    (seen,) = llm.tool_results_seen(msg)
+    assert seen["correction"]["violation"] == "invalid_params" and problem in seen["correction"]["message"]
     assert bank.requests == []
