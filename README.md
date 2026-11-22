@@ -217,6 +217,20 @@ chat hub; nothing outside Ironclad calls search yet.
 customer-facing agent has.** It exists for staff tooling; an internal ops
 agent (staff-only, with its own key) is possible future work.
 
+**The approval line.** After `initiate_transfer` starts a transfer, the
+agent service adds a fixed line after the model's reply, built only from the
+structured tool result: "Transfer of $50.00 to Bob Smith (ACC-10043-CHK) is
+waiting for your approval. Enter the OTP shown in your Ironclad app." The
+model only confirms in its own words and never mentions codes. The line is
+added after the output scan (the model didn't write it) and after any
+fallback, once per transfer. Payee names are untrusted (anyone can set
+theirs): control characters and markup are stripped, and the name is cut to
+60 characters. If Anvil withholds the initiate response (e.g. a payee named
+like an injection), the transfer is flagged (`response_withheld`) and the
+line gives only the amount; if even that can't be read, a generic line is
+shown and every pending agent transfer from that turn is flagged
+(`POST /transfers/flag-recent`).
+
 **Blocked replies.** When Anvil's output scan blocks the banking agent's
 reply, the user sees a fallback line built from what the turn's tools did,
 never the blocked text. A transfer that turn started is **not** cancelled

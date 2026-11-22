@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import os
 import uuid
+from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -29,6 +30,8 @@ if os.path.exists(_forge_env):
     load_dotenv(_forge_env)
 
 from bastion import Platform, load_config  # noqa: E402
+
+from . import approval  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(name)s  %(message)s")
 logger = logging.getLogger("ironclad-agent")
@@ -121,6 +124,7 @@ def build_platform(**platform_kwargs: Any) -> Platform:
             raise RuntimeError(f"BASTION_KEY belongs to app {platform.app!r}, not {APP!r}.")
         logger.info("bastion remote mode: %s, revision %s", url, platform.bundle_revision)
         holder["platform"] = platform
+        platform.bank_transport = platform_kwargs.get("http_transport")  # for the approval-line flags
         return platform
     raw = yaml.safe_load(open(CONFIG_PATH))
     if bank_url:  # e.g. http://bank-service:8001 in docker-compose; the YAML says localhost
@@ -129,6 +133,7 @@ def build_platform(**platform_kwargs: Any) -> Platform:
         raw["agents"][AGENT_ID]["model"] = os.environ["OPENAI_MODEL"]
     platform = Platform(load_config(raw), app=APP, prepare_tool_call=prepare_tool_call, **platform_kwargs)
     holder["platform"] = platform
+    platform.bank_transport = platform_kwargs.get("http_transport")  # for the approval-line flags
     return platform
 
 
@@ -196,12 +201,38 @@ def health():
 
 @app.post("/agent/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
+    started = datetime.now(timezone.utc)
     try:
         reply = await _platform().run_agent(AGENT, req.message, session_id=req.session_id)
     except Exception as exc:
         logger.exception("Agent error")
         return ChatResponse(reply=f"I encountered an error: {exc}", tool_calls=[])
-    return ChatResponse(reply=reply.content, tool_calls=[_tool_call_info(c) for c in reply.trace.get("tool_calls", [])])
+    calls = reply.trace.get("tool_calls", [])
+    # The approval line is the system's, added after the output scan and
+    # after any fallback reply (see app/approval.py).
+    lines, to_flag, flag_recent = approval.plan(calls)
+    if to_flag or flag_recent:
+        await _flag_withheld(to_flag, started if flag_recent else None)
+    return ChatResponse(reply=approval.append(reply.content, lines),
+                        tool_calls=[_tool_call_info(c) for c in calls])
+
+
+async def _flag_withheld(transfer_ids: list[str], since: datetime | None) -> None:
+    """Flag transfers whose initiate response Anvil withheld. With *since*,
+    the host couldn't read which one it was: flag every pending agent
+    transfer this user has had since the turn started."""
+    platform = _platform()
+    base = platform.config.platform.apps[APP]["base_url"].rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=10, transport=getattr(platform, "bank_transport", None)) as client:
+            for tid in transfer_ids:
+                await client.post(f"{base}/transfers/{tid}/flag",
+                                  json={"user_id": BANK_USER_ID, "reason": approval.WITHHELD_REASON})
+            if since is not None:
+                await client.post(f"{base}/transfers/flag-recent", json={
+                    "user_id": BANK_USER_ID, "since": since.isoformat(), "reason": approval.WITHHELD_REASON})
+    except httpx.HTTPError:
+        logger.exception("Could not flag withheld transfers %s", transfer_ids)
 
 
 @app.post("/agent/reset")

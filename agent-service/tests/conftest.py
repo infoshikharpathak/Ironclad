@@ -53,13 +53,20 @@ class StubLLM:
         self.plans = plans
         self.requests: list[list] = []
         self.flag_words: list[str] = []  # the classifier flags text containing any of these
+        self.label_words: dict[str, str] = {}  # word -> output label (unrequested_action, ...)
+        self.classifier_texts: list[str] = []  # every text the classifier was asked about
         self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
 
     async def _create(self, **kwargs):
         msgs = kwargs["messages"]
         if is_classifier_request(msgs):  # Anvil's injection scan, via the SDK
-            text = (_content(msgs[-1]) or "").lower()
-            hit = next((w for w in self.flag_words if w in text), None)
+            text = _content(msgs[-1]) or ""
+            self.classifier_texts.append(text)
+            label = next((lbl for w, lbl in self.label_words.items() if w in text), None)
+            if label:
+                return _completion({"role": "assistant", "content": json.dumps({"label": label, "reason": "stub"})},
+                                   "stop")
+            hit = next((w for w in self.flag_words if w in text.lower()), None)
             verdict = {"injection": True, "pattern": f"says {hit}"} if hit else {"injection": False}
             return _completion({"role": "assistant", "content": json.dumps(verdict)}, "stop")
         self.requests.append(msgs)
@@ -105,6 +112,8 @@ class StubBank:
         self.leak_otp = False  # behave like an old bank that returned the code
         self.memo = "Lunch"     # memo on the incoming payment get_transactions returns
         self.flag_fails = False
+        self.initiate_error = None  # (status, body) to refuse transfers
+        self.payee_name = "Ana Silva"  # the directory name the bank returns as to_name
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -132,6 +141,8 @@ class StubBank:
             for r in results:
                 r.pop("level")
             return httpx.Response(200, json={"query": request.url.params["q"], "min_score": 0.43, "results": results})
+        if path == "/transfers/flag-recent":
+            return httpx.Response(200, json={"flagged": ["tr-1"]})
         if path.startswith("/transfers/") and path.endswith("/flag"):
             if self.flag_fails:
                 return httpx.Response(500, json={"error": "BOOM"})
@@ -139,7 +150,11 @@ class StubBank:
                                              "flagged_by_output_scan": True})
         if path == "/transfers/initiate":
             body = json.loads(request.content)
-            out = {"transfer_id": "tr-1", "status": "pending_otp", "amount": body["amount"]}
+            if self.initiate_error:
+                return httpx.Response(self.initiate_error[0], json=self.initiate_error[1])
+            out = {"transfer_id": "tr-1", "status": "pending_otp", "amount": body["amount"],
+                   "from_account": body["from_account"], "to_account": body["to_account"],
+                   "to_name": self.payee_name}
             if self.leak_otp:
                 out["otp_code"] = "482913"
             return httpx.Response(200, json=out)

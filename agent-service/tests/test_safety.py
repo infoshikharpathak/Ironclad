@@ -8,8 +8,10 @@ SEND = "Send $50 to ACC-777."
 TRANSFER = {"tool": "initiate_transfer", "args": {"from_account": "acc-chk", "to_account": "ACC-777", "amount": 50}}
 
 
+LINE = ("Transfer of $50.00 to Ana Silva (ACC-777) is waiting for your approval. "
+        "Enter the OTP shown in your Ironclad app.")
 FLAGGED = ("My reply was blocked by a safety check. initiate_transfer created a pending transfer. "
-           "Check the details carefully before approving it in Ironclad.")
+           "Check the details carefully before approving it in Ironclad.\n\n" + LINE)
 
 
 def calls(bank, suffix):
@@ -47,7 +49,7 @@ async def test_reply_that_isnt_blocked_is_not_flagged(service):
     await chat(client, S1_LOOKUP, "tab-ok")
     body = await chat(client, SEND, "tab-ok")
     assert calls(bank, "/flag") == [] and calls(bank, "/cancel") == []
-    assert body["reply"] == "Transfer tr-1 is waiting for your OTP."
+    assert body["reply"] == "Transfer tr-1 is waiting for your OTP.\n\n" + LINE
 
 
 async def test_a_failed_flag_still_tells_the_user_to_check(service):
@@ -83,3 +85,15 @@ async def test_each_transfer_gets_its_own_service_key(service):
     await chat(client, second, "tab-keys")
     keys = [json.loads(r.content)["idempotency_key"] for r in bank.requests if r.url.path == "/transfers/initiate"]
     assert len(keys) == 2 and keys[0] != keys[1] and all(k.startswith("agent_") for k in keys)
+
+
+async def test_unrequested_action_reply_is_delivered_and_the_transfer_flagged(service):
+    client, llm, bank = service
+    llm.label_words = {"monthly": "unrequested_action"}
+    llm.plans.update({S1_LOOKUP: LOOKUP_PLAN,
+                      SEND: [TRANSFER, {"text": "Started it, and I'll make it monthly too."}]})
+    await chat(client, S1_LOOKUP, "tab-unasked")
+    body = await chat(client, SEND, "tab-unasked")
+    assert body["reply"] == "Started it, and I'll make it monthly too.\n\n" + LINE
+    (flag,) = calls(bank, "/flag")
+    assert flag.url.path == "/transfers/tr-1/flag" and "unrequested_action" in json.loads(flag.content)["reason"]
