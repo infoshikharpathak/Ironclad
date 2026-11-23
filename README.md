@@ -64,6 +64,8 @@ uvicorn app.main:app --port 8001 --reload
 # tests: the payments tests need a Postgres they can create schemas in
 TEST_DATABASE_URL=postgresql://anvil:devpassword@localhost:5432/anvil_bank pytest -q tests
 
+# Both services write JSON logs to $IRONCLAD_LOG_DIR (default ./logs); see
+# "Incident diagnosis with LogScribe".
 # 3. Agent service (local mode reads ../anvil-ironclad.yaml; the bank is at localhost:8001,
 #    or wherever IRONCLAD_BASE_URL points: docker-compose sets http://bank-service:8001)
 cd agent-service
@@ -323,6 +325,129 @@ the internal key: 15/15 returned the right internal document in the top 3.
 one embedding model, so differences of one or two questions are noise.
 (An earlier phase gave the banking agent the internal key, and one held-out
 answer quoted an internal fraud threshold; it now has a public-only key.)
+
+## Incident diagnosis with LogScribe
+
+[LogScribe](https://github.com/infoshikharpathak/logscribe) tails both
+services' logs, spots errors as they happen, and uses RAG over past errors
+(ChromaDB) to write a root-cause analysis for each new failure.
+
+### What the services log
+
+Both services write one JSON object per line to stdout and to
+`$IRONCLAD_LOG_DIR/<service>.log` (default `./logs`): `timestamp`,
+`service_name`, `level`, `message`, `request_id`, `endpoint` (the route
+template, never the raw path), `method`, `status_code`, `duration_ms`,
+`error_type`, and `stack_trace` for exceptions. Every request gets an
+`X-Request-ID` (a well-formed incoming one is reused) and one INFO line.
+
+Logged at ERROR, as incidents:
+
+| Service | Event | `error_type` |
+|---|---|---|
+| bank-service | Unhandled exceptions, database errors | exception class (`ConnectionRefusedError`, ...) |
+| bank-service | OTP failures | `OTP_EXPIRED`, `OTP_MAX_ATTEMPTS` (a single wrong code, `OTP_INVALID`, is WARNING) |
+| bank-service | Transfer limit refusals | `LIMIT_PER_TRANSFER`, `LIMIT_DAILY`, `AMOUNT_OVER_LIMIT` |
+| bank-service | Merchant API rejections | `MERCHANT_KEY_INVALID`, `MERCHANT_SUSPENDED`, any 401/403 on `/payments` |
+| bank-service | Policy search outages | `POLICY_SEARCH_UNAVAILABLE`, `POLICY_KEY_INVALID` |
+| agent-service | LLM provider errors (auth, 429, timeouts) | `AuthenticationError`, `RateLimitError`, ... (with `provider` and status) |
+| agent-service | Anvil blocks and violations | the violation (`invalid_params`, `injection_detected_agent_input`, ...) and `tool` |
+
+Never logged: request or response bodies, user messages, model replies, tool
+parameters or Anvil's explanations. Messages and stack traces are scrubbed
+on the way out as a backstop: merchant, policy, A2A and OpenAI keys, bearer
+tokens, OTP-like 6-digit codes and database passwords are redacted, and
+account numbers are cut to their last 4 digits (`ACC-10042-CHK` becomes
+`****0042`). `tests/test_logs.py` in each service sends requests carrying an
+OTP, keys, an account number and user text, and checks none of them reach
+the log file.
+
+### Two kinds of RAG
+
+| | Policy documents | Past incidents |
+|---|---|---|
+| Who uses it | The banking agent, answering customers | LogScribe, diagnosing failures |
+| What's retrieved | Chunks of `bank-service/policies/*.md` | Earlier errors from these logs, plus seeded examples |
+| Store | Postgres + pgvector (hybrid search, access levels) | ChromaDB, collection `ironclad_errors` |
+| Query | The customer's question | The new error (type, message, service, endpoint) |
+| Output | A cited answer | A root-cause analysis that cites matched incidents |
+
+### Setup
+
+`logscribe/ironclad.toml` watches both log files with their service names,
+and keeps Ironclad's history in its own collection. `logscribe/seed_incidents.json`
+holds **seeded examples**, written for Ironclad, not real incident history
+(Postgres connection refused or lost, pgvector missing, OpenAI 429 and 401,
+an OTP_MAX_ATTEMPTS spike, a revoked merchant key), each with symptom,
+cause and fix. LogScribe marks them as seeded wherever they're matched.
+
+Local run, with both services logging to `<repo>/logs`:
+
+```bash
+export IRONCLAD_LOG_DIR="$PWD/logs"     # in each terminal: both services and LogScribe
+(cd bank-service && uvicorn app.main:app --port 8001)
+(cd agent-service && uvicorn app.main:app --port 8002)
+
+pip install "logscribe @ git+https://github.com/infoshikharpathak/logscribe.git"
+logscribe seed  --config logscribe/ironclad.toml   # once (idempotent)
+logscribe watch --config logscribe/ironclad.toml --report logs/diagnosis.jsonl
+```
+
+To route the analysis through Agent Forge (so each LLM call is traced), run
+Agent Forge on :8000 and set `LOGSCRIBE_ANALYZER=agent_forge` (and
+`AGENT_FORGE_URL` if it's elsewhere). Its traces are under
+`GET /traces?app_id=logscribe`.
+
+With Docker, LogScribe is an optional service (a profile, off by default):
+
+```bash
+docker compose --profile logscribe up --build
+docker compose logs -f logscribe
+```
+
+It reads the services' logs from a shared volume, seeds on start, and keeps
+its history, the embedding model and its report in the `logscribe-data`
+volume.
+
+### Example: a revoked merchant key (live test, 2026-11-23)
+
+QuickMart's key was rotated (`python -m app.cli merchants issue-key quickmart`)
+and a payment request was sent with the old one. The bank logged:
+
+```json
+{"service_name": "bank-service", "level": "ERROR", "message": "MERCHANT_KEY_INVALID: Unknown merchant key.",
+ "request_id": "live-case4-revoked-key", "endpoint": "/payments/requests", "method": "POST",
+ "status_code": 401, "error_type": "MERCHANT_KEY_INVALID", ...}
+```
+
+LogScribe (Agent Forge analyzer, trace `04752d15-d279-4c3b-a4ca-6b6c3f85d2cc`)
+matched:
+
+| Similarity | Past error | When |
+|---|---|---|
+| 0.878 | MERCHANT_KEY_INVALID | seeded example |
+| 0.674 | OTP_MAX_ATTEMPTS | live, the OTP test a moment before |
+| 0.610 | ConnectionDoesNotExistError | seeded example |
+| 0.599 | ConnectionRefusedError | seeded example |
+| 0.593 | ConnectionRefusedError | live, 15 s earlier |
+
+and concluded (abridged):
+
+> **Most likely root cause:** The merchant is sending an invalid, stale, or
+> revoked merchant key to `bank-service`, so the auth layer rejects the
+> request with 401 `MERCHANT_KEY_INVALID`. [...] Known cause in the past: the
+> merchant's key was rotated via `python -m app.cli merchants issue-key`, but
+> the merchant kept using the old key. [...] The `ConnectionRefusedError` on
+> `GET /accounts` is a different incident [...] not the cause of this 401.
+>
+> **Recommended next steps:** check whether the key was recently rotated or
+> revoked; verify the exact key the client sends; compare it to the active
+> key; if the rotation was intentional, update the merchant's integration
+> (e.g. `IRONCLAD_MERCHANT_KEY`).
+
+A repeat of an earlier failure matches the earlier one as well as the
+seeds: a second Postgres outage matched the first real one at 1.00, above
+the seeded example (0.91).
 
 ## Known limitations
 - `POST /accounts/reset` resets the user's own balances and deletes their
