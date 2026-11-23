@@ -6,6 +6,7 @@ are skipped. The database needs pgvector; the extension lives in public."""
 from __future__ import annotations
 
 import os
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -13,6 +14,8 @@ import pytest
 
 DB_DIR = Path(__file__).resolve().parents[2] / "db"
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
+# Logs from app.main's import go to a temp dir, not bank-service/logs.
+os.environ.setdefault("IRONCLAD_LOG_DIR", tempfile.mkdtemp(prefix="ironclad-test-logs-"))
 
 
 @pytest.fixture
