@@ -164,7 +164,9 @@ def install_request_logging(app: Any) -> None:
         incoming = request.headers.get("x-request-id", "")
         request_id = incoming if _REQUEST_ID.match(incoming) else uuid.uuid4().hex[:16]
         rid_token = request_id_var.set(request_id)
-        ep_token = endpoint_var.set(None)
+        # Lines logged inside the handler get the path now (scrubbed); the
+        # request line below uses the route template once routing has run.
+        ep_token = endpoint_var.set(scrub(request.url.path))
         started = time.perf_counter()
         try:
             try:

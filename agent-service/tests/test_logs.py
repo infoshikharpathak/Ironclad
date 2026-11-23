@@ -92,6 +92,7 @@ async def test_llm_auth_error_is_an_incident_without_the_key(service, log_file):
     assert errors, "no incident logged"
     line = errors[-1]
     assert line["provider"] == "openai" and line["error_type"] == "AuthenticationError"
+    assert line["endpoint"] == "/agent/chat" and line["request_id"]
     assert "status 401" in line["message"] and "Traceback" in line["stack_trace"]
     text = log_file.read_text()
     assert "sk-bad-ironclad-test-key" not in text and OTP not in text and KEY not in text
