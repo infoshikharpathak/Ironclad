@@ -31,6 +31,10 @@ services:
       DATABASE_URL: postgresql://anvil:${DB_PASSWORD:-devpassword}@db:5432/anvil_bank
       # Embeds policy search queries (GET /policies/search).
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # JSON logs for LogScribe (logscribe profile below), shared with agent-service.
+      IRONCLAD_LOG_DIR: /logs
+    volumes:
+      - logs:/logs
     ports:
       - "8001:8001"
     depends_on:
@@ -54,12 +58,39 @@ services:
       IRONCLAD_BASE_URL: http://bank-service:8001
       # Policy-access key (public + internal) for search_policies; see anvil-ironclad.yaml.
       IRONCLAD_POLICY_KEY: ${IRONCLAD_POLICY_KEY}
+      IRONCLAD_LOG_DIR: /logs
     volumes:
       - ./anvil-ironclad.yaml:/app/anvil-ironclad.yaml:ro
+      - logs:/logs
     ports:
       - "8002:8002"
     depends_on:
       - bank-service
 
+  # Incident diagnosis: tails both services' logs and analyzes each error
+  # against past ones. Off by default: docker compose --profile logscribe up
+  logscribe:
+    profiles: ["logscribe"]
+    build: ./logscribe
+    environment:
+      IRONCLAD_LOG_DIR: /logs
+      # Root-cause analysis and on-call summaries.
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      # Set LOGSCRIBE_ANALYZER=agent_forge to route the analysis through Agent
+      # Forge (traced), running on the host at AGENT_FORGE_URL.
+      LOGSCRIBE_ANALYZER: ${LOGSCRIBE_ANALYZER:-openai}
+      AGENT_FORGE_URL: ${AGENT_FORGE_URL:-http://host.docker.internal:8000}
+      HF_HOME: /root/.logscribe/hf  # embedding model cache, kept in the volume
+    volumes:
+      - logs:/logs:ro
+      - logscribe-data:/root/.logscribe  # ChromaDB history, embedding model cache, reports
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - bank-service
+      - agent-service
+
 volumes:
   pgdata:
+  logs:
+  logscribe-data:

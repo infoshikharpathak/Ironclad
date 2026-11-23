@@ -1,0 +1,23 @@
+# LogScribe watch config for Ironclad: both services' JSON logs, with their
+# own error history (ChromaDB collection) and seeded example incidents.
+#
+#   logscribe seed  --config logscribe/ironclad.toml     # once: load seed_incidents.json
+#   logscribe watch --config logscribe/ironclad.toml
+#
+# Paths are relative to this file. Both services write to IRONCLAD_LOG_DIR;
+# run them with the same value (the README uses <repo>/logs, docker-compose /logs).
+
+name = "ironclad"
+collection = "ironclad_errors"
+buffer_size = 20
+top_k = 5
+min_similarity = 0.3
+seeds = "seed_incidents.json"
+
+[[sources]]
+service = "bank-service"
+path = "${IRONCLAD_LOG_DIR:-../logs}/bank-service.log"
+
+[[sources]]
+service = "agent-service"
+path = "${IRONCLAD_LOG_DIR:-../logs}/agent-service.log"
