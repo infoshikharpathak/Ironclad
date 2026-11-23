@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from types import SimpleNamespace
 
 import httpx
@@ -13,6 +14,8 @@ from bastion.classifier import is_classifier_request
 from openai.types.chat import ChatCompletion
 
 os.environ.setdefault("OPENAI_API_KEY", "dummy-key-for-tests")
+# Logs from app.main's import go to a temp dir, not agent-service/logs.
+os.environ.setdefault("IRONCLAD_LOG_DIR", tempfile.mkdtemp(prefix="ironclad-test-logs-"))
 # The banking agent talks to customers, so its key reads public policies only.
 PUBLIC_KEY, INTERNAL_KEY = "pk_test_banking_agent_public", "pk_test_internal_unassigned"
 os.environ.setdefault("IRONCLAD_POLICY_KEY", PUBLIC_KEY)

@@ -8,7 +8,6 @@ every tool call, and the HTTP shapes the web UI expects.
 
 from __future__ import annotations
 
-import logging
 import os
 import uuid
 from datetime import datetime, timezone
@@ -31,10 +30,10 @@ if os.path.exists(_forge_env):
 
 from bastion import Platform, load_config  # noqa: E402
 
-from . import approval, requested, search_retry  # noqa: E402
+from . import approval, logs, requested, search_retry  # noqa: E402
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(name)s  %(message)s")
-logger = logging.getLogger("ironclad-agent")
+SERVICE_NAME = "agent-service"
+logger = logs.configure(SERVICE_NAME)
 
 # docker-compose sets ANVIL_CONFIG_PATH (the yaml is mounted at /app/anvil-ironclad.yaml).
 # Local dev falls back to the repo-root file next to agent-service/.
@@ -157,6 +156,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+logs.install_request_logging(app)
 
 
 def _platform() -> Platform:
@@ -207,9 +207,11 @@ async def chat(req: ChatRequest):
     try:
         reply = await _platform().run_agent(AGENT, req.message, session_id=req.session_id)
     except Exception as exc:
-        logger.exception("Agent error")
+        message, extra = logs.describe_exception(exc)
+        logger.error(message, exc_info=exc, extra={"error_type": type(exc).__name__, **extra})
         return ChatResponse(reply=f"I encountered an error: {exc}", tool_calls=[])
     calls = reply.trace.get("tool_calls", [])
+    log_governance(reply.trace)
     # The approval line is the system's, added after the output scan and
     # after any fallback reply (see app/approval.py).
     lines, to_flag, flag_recent = approval.plan(calls)
@@ -217,6 +219,22 @@ async def chat(req: ChatRequest):
         await _flag_withheld(to_flag, started if flag_recent else None)
     return ChatResponse(reply=approval.append(reply.content, lines),
                         tool_calls=[_tool_call_info(c) for c in calls])
+
+
+def log_governance(trace: dict[str, Any]) -> None:
+    """Anvil blocks and violations in this turn, as incidents for LogScribe:
+    the violation type, where it happened and the tool, never the message,
+    the reply, tool parameters or Anvil's explanation."""
+    for v in trace.get("violations") or []:
+        violation, kind = v.get("violation") or "unknown_violation", v.get("kind") or "tool"
+        tool = _short(v["tool"]) if v.get("tool") else None
+        where = f"tool call {tool}" if tool else kind.replace("_", " ")
+        logger.error("Anvil blocked %s: %s", where, violation,
+                     extra={"error_type": violation, "violation": violation, "tool": tool})
+    check = trace.get("output_check") or {}
+    if check.get("result") == "flag":  # delivered, but labeled (e.g. unrequested_action)
+        label = check.get("label") or "flagged"
+        logger.error("Anvil flagged the agent's reply: %s", label, extra={"error_type": label, "violation": label})
 
 
 async def _flag_withheld(transfer_ids: list[str], since: datetime | None) -> None:
