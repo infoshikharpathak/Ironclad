@@ -7,7 +7,7 @@ RUN apt-get update \
 
 # Pinned by full commit SHA.
 RUN pip install --no-cache-dir \
-    "logscribe @ git+https://github.com/infoshikharpathak/logscribe.git@c192e686bc506337548d311de567d9f15e2122af"
+    "logscribe @ git+https://github.com/infoshikharpathak/logscribe.git@9975b34c6f273f2f2ccdc065e63f1a4a654757fb"
 
 WORKDIR /config
 COPY ironclad.toml seed_incidents.json ./

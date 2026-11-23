@@ -13,6 +13,11 @@ buffer_size = 20
 top_k = 5
 min_similarity = 0.3
 seeds = "seed_incidents.json"
+# Ironclad's git repo, for the Agent Forge analyzer's commit correlation (its
+# git and file tools must be allowed to read it). The path is Agent Forge's
+# view of the repo: set IRONCLAD_REPO_PATH when it runs elsewhere (e.g. on the
+# host while LogScribe runs in docker-compose).
+repo_path = "${IRONCLAD_REPO_PATH:-..}"
 
 [[sources]]
 service = "bank-service"

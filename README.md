@@ -398,6 +398,16 @@ Agent Forge on :8000 and set `LOGSCRIBE_ANALYZER=agent_forge` (and
 `AGENT_FORGE_URL` if it's elsewhere). Its traces are under
 `GET /traces?app_id=logscribe`.
 
+The config's `repo_path` is this repo, so each analysis checks Ironclad's
+recent commits and cites the ones it looked at. Agent Forge's git and file
+MCP servers must be allowed to read it: in Agent Forge's `mcp_servers.json`,
+`--repository <path to Ironclad>` for the git server and the same path among
+the file server's directories. When Agent Forge sees the repo at another
+path (LogScribe in Docker, Agent Forge on the host), set `IRONCLAD_REPO_PATH`
+to the path Agent Forge sees. In the live test, an `OTP_MAX_ATTEMPTS`
+analysis cited `8fe4f4e` (the commit that logs it as an incident) and said
+it made the failure visible rather than causing it.
+
 With Docker, LogScribe is an optional service (a profile, off by default):
 
 ```bash

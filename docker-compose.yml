@@ -80,6 +80,8 @@ services:
       # Forge (traced), running on the host at AGENT_FORGE_URL.
       LOGSCRIBE_ANALYZER: ${LOGSCRIBE_ANALYZER:-openai}
       AGENT_FORGE_URL: ${AGENT_FORGE_URL:-http://host.docker.internal:8000}
+      # Ironclad's repo as Agent Forge (on the host) sees it, for commit correlation.
+      IRONCLAD_REPO_PATH: ${IRONCLAD_REPO_PATH:-}
       HF_HOME: /root/.logscribe/hf  # embedding model cache, kept in the volume
     volumes:
       - logs:/logs:ro
