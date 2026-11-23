@@ -9,5 +9,5 @@ __pycache__/
 anvil_traces/
 agent_forge_traces.db
 anvil_forge_traces.jsonl
-bastion_traces.jsonl
+*_traces.jsonl
 logs/

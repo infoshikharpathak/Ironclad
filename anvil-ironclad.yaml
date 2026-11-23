@@ -1,5 +1,5 @@
-# bastion config for Ironclad: the ironclad app, its tools, and the
-# banking agent. bastion compiles the agent's tools, sequences,
+# garrison config for Ironclad: the ironclad app, its tools, and the
+# banking agent. garrison compiles the agent's tools, sequences,
 # strictness and trust overrides into the Anvil policy that governs every
 # call, so that policy is the single source of truth for what the agent may do.
 # Tool IDs are "ironclad.<tool>", agent IDs "ironclad.<agent>"; inside an

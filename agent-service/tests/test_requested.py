@@ -1,7 +1,7 @@
 """The deterministic 'did the user ask for this transfer?' check."""
 
 import pytest
-from bastion import NOT_AN_ACTION
+from garrison import NOT_AN_ACTION
 
 from app.requested import amounts, is_requested_action
 

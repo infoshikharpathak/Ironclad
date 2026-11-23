@@ -7,6 +7,6 @@ anthropic>=0.40.0
 
 pyyaml>=6.0
 
-# The bastion SDK (brings anvil-ai and agent-forge at the commits it pins).
+# The garrison SDK (brings anvil-ai and agent-forge at the commits it pins).
 # Pinned by full commit SHA; the SDK lives in the repo's sdk/ folder.
-bastion @ git+https://github.com/infoshikharpathak/bastion.git@67151bc3c7f3119165e9475c435e3aa3e7a3183d#subdirectory=sdk
+garrison @ git+https://github.com/infoshikharpathak/garrison.git@46bb3eae119708b1411d301f5d6ab75adb457b5c#subdirectory=sdk

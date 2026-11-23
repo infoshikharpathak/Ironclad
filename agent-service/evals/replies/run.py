@@ -157,7 +157,7 @@ class ScenarioBank:
 
 async def run_one(sc: dict, run: int, model: str) -> dict:
     import app.main as main
-    from bastion import Platform, load_config
+    from garrison import Platform, load_config
 
     raw = yaml.safe_load(open(main.CONFIG_PATH))
     raw["agents"][main.AGENT_ID]["model"] = model

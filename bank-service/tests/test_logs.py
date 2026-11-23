@@ -119,3 +119,9 @@ def test_exceptions_are_scrubbed_in_message_and_stack_trace(tmp_path):
 def test_database_errors_are_named():
     message, _ = logs.describe_exception(ConnectionRefusedError(61, "Connect call failed ('127.0.0.1', 5432)"))
     assert message.startswith("Database error: ConnectionRefusedError")
+
+
+def test_garrison_app_keys_are_scrubbed():
+    for key in ("gk_" + "N3w" * 14, "bk_" + "0ld" * 14):  # current and pre-rename Garrison app keys
+        scrubbed = logs.scrub(f"rejected key {key}")
+        assert key not in scrubbed and scrubbed.endswith(f"{key[:2]}_[redacted]")

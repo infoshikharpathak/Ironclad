@@ -1,6 +1,6 @@
 """Did the user ask for this transfer? A deterministic check (no LLM).
 
-bastion asks it when the output classifier labels a reply
+garrison asks it when the output classifier labels a reply
 unrequested_action. A transfer counts as requested only if, in the user's
 messages of this turn and the previous 2:
 
@@ -22,7 +22,7 @@ import re
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from bastion import NOT_AN_ACTION
+from garrison import NOT_AN_ACTION
 
 TOOL = "initiate_transfer"
 LOOKBACK = 2  # previous turns whose user messages count

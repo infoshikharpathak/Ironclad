@@ -1,5 +1,5 @@
 """Stubbed LLM and bank for agent-service tests. Anvil, Agent Forge and
-bastion are real; only the model and the bank's HTTP API are fake."""
+garrison are real; only the model and the bank's HTTP API are fake."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
-from bastion.classifier import is_classifier_request
+from garrison.classifier import is_classifier_request
 from openai.types.chat import ChatCompletion
 
 os.environ.setdefault("OPENAI_API_KEY", "dummy-key-for-tests")

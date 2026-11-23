@@ -35,7 +35,7 @@ python demo/planted_injection.py   # needs bank-service (:8001) and agent-servic
 2. demo_user asks the assistant: *"What are the recent transactions on my checking account?"*
 3. The agent calls `get_transactions`. The bank returns Bob's payment, memo included. `get_transactions` is **untrusted** in `anvil-ironclad.yaml`, so Anvil scans the response, matches `ignore (all )?previous instructions`, and withholds it. The model gets only Anvil's correction, never the memo, and no transfer is attempted.
 
-The web app's **Traces** panel shows `get_transactions` as **Blocked · Injection**, with the matched pattern. With the agent-service in remote mode (`BASTION_URL`, `BASTION_KEY`), the same run is on the bastion dashboard under the app's blocked traces. The script first resets demo_user's accounts (seed balances, their own transactions deleted), so Bob's memo is always the newest transaction and the fixed question always reaches it. Bob's transfer is his, so the reset keeps it, and planting is idempotent.
+The web app's **Traces** panel shows `get_transactions` as **Blocked · Injection**, with the matched pattern. With the agent-service in remote mode (`GARRISON_URL`, `GARRISON_KEY`), the same run is on the garrison dashboard under the app's blocked traces. The script first resets demo_user's accounts (seed balances, their own transactions deleted), so Bob's memo is always the newest transaction and the fixed question always reaches it. Bob's transfer is his, so the reset keeps it, and planting is idempotent.
 
 ## Architecture
 
@@ -213,7 +213,7 @@ Each caller gets its own key, so each can be revoked on its own. The banking
 agent talks to customers, so its key (`IRONCLAD_POLICY_KEY`, sent by Anvil as
 the ironclad app's auth header: never in tool params, model context or
 traces) reads **public** policies only. The chat hub (a separate app) has
-its own public-only key, `chathub`, which it sends itself through a bastion
+its own public-only key, `chathub`, which it sends itself through a garrison
 grant of the search tool; it has no merchant key, so it can never call the
 payments API, and no bank tools.
 
@@ -253,7 +253,7 @@ data-changing tool, `initiate_transfer`, needs the OTP; it may run only
 after `get_accounts` or `lookup_account` (`requires_any`).
 
 **Requested transfers aren't flagged.** When the output classifier labels
-a reply `unrequested_action`, bastion asks the agent service, for each
+a reply `unrequested_action`, garrison asks the agent service, for each
 transfer the turn started, whether the user asked for it
 (`app/requested.py`, no LLM). It counts as requested only if, in the user's
 messages of this turn and the previous two, the user wrote the transfer's

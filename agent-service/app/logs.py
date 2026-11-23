@@ -47,8 +47,8 @@ def _mask_account(digits_or_id: str) -> str:
 
 
 _SCRUB: list[tuple[re.Pattern[str], Any]] = [
-    # Ironclad merchant/policy keys, FoodDash A2A keys, bastion keys, OpenAI and Anthropic keys.
-    (re.compile(r"\b(mk|pk|ak|bk)_[A-Za-z0-9_\-]{4,}"), lambda m: f"{m.group(1)}_[redacted]"),
+    # Ironclad merchant/policy keys, FoodDash A2A keys, Garrison app keys (gk_, and bk_ from before the rename), OpenAI and Anthropic keys.
+    (re.compile(r"\b(mk|pk|ak|gk|bk)_[A-Za-z0-9_\-]{4,}"), lambda m: f"{m.group(1)}_[redacted]"),
     (re.compile(r"\bsk-[A-Za-z0-9_\-*.]{4,}"), "sk-[redacted]"),
     (re.compile(r"(?i)\bbearer\s+[^\s'\"]+"), "Bearer [redacted]"),
     (re.compile(r"(?i)\b(password|passwd|api[_-]?key|secret|token|otp(?:_code)?)(['\"]?\s*[=:]\s*['\"]?)[^\s'\",}]+"),

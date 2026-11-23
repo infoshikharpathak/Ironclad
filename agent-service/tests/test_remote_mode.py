@@ -1,4 +1,4 @@
-"""BASTION_URL + BASTION_KEY: the agent runs on the control plane's bundle."""
+"""GARRISON_URL + GARRISON_KEY: the agent runs on the control plane's bundle."""
 
 import copy
 import hashlib
@@ -15,7 +15,7 @@ CONFIG = yaml.safe_load((Path(__file__).resolve().parents[2] / "anvil-ironclad.y
 KEY = "bk_" + "k" * 43
 
 
-class FakeBastion:
+class FakeGarrison:
     """The control plane's GET /v1/sdk/bundle, with ETags."""
 
     def __init__(self, bundle):
@@ -38,13 +38,13 @@ class FakeBastion:
 async def remote(monkeypatch, tmp_path):
     import app.main as main
 
-    monkeypatch.setenv("BASTION_URL", "http://bastion.test")
-    monkeypatch.setenv("BASTION_KEY", KEY)
-    monkeypatch.setenv("BASTION_REFRESH_SECONDS", "0")  # tests refresh explicitly
-    forge, llm, bank = FakeBastion(CONFIG), StubLLM({}), StubBank()
+    monkeypatch.setenv("GARRISON_URL", "http://garrison.test")
+    monkeypatch.setenv("GARRISON_KEY", KEY)
+    monkeypatch.setenv("GARRISON_REFRESH_SECONDS", "0")  # tests refresh explicitly
+    forge, llm, bank = FakeGarrison(CONFIG), StubLLM({}), StubBank()
     platform = main.build_platform(openai_client=llm, http_transport=httpx.MockTransport(bank),
                                    service_transport=httpx.MockTransport(forge), cache_dir=tmp_path,
-                                   dashboard=False)  # FakeBastion has no /v1/traces
+                                   dashboard=False)  # FakeGarrison has no /v1/traces
     await platform.start()
     main.app.state.platform = platform
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url="http://agent") as client:
@@ -84,7 +84,7 @@ def test_key_for_another_app_is_refused(monkeypatch, tmp_path):
     import app.main as main
 
     other = copy.deepcopy(CONFIG)
-    forge = FakeBastion(other)
+    forge = FakeGarrison(other)
     forge_resp = forge.__call__
 
     def as_other_app(request):
@@ -94,8 +94,8 @@ def test_key_for_another_app_is_refused(monkeypatch, tmp_path):
         body["bundle"] = {"apps": {"notify": {"tools": {}}}}
         return httpx.Response(200, json=body)
 
-    monkeypatch.setenv("BASTION_URL", "http://bastion.test")
-    monkeypatch.setenv("BASTION_KEY", KEY)
+    monkeypatch.setenv("GARRISON_URL", "http://garrison.test")
+    monkeypatch.setenv("GARRISON_KEY", KEY)
     with pytest.raises(RuntimeError, match="belongs to app 'notify'"):
         main.build_platform(service_transport=httpx.MockTransport(as_other_app), cache_dir=tmp_path)
 
@@ -103,8 +103,8 @@ def test_key_for_another_app_is_refused(monkeypatch, tmp_path):
 def test_without_the_env_vars_it_is_local_mode(monkeypatch):
     import app.main as main
 
-    monkeypatch.delenv("BASTION_URL", raising=False)
-    monkeypatch.delenv("BASTION_KEY", raising=False)
+    monkeypatch.delenv("GARRISON_URL", raising=False)
+    monkeypatch.delenv("GARRISON_KEY", raising=False)
     platform = main.build_platform()
     assert platform.bundle_revision is None and platform.app == "ironclad"
 
@@ -117,8 +117,8 @@ async def test_ironclad_base_url_points_tools_at_the_bank(monkeypatch):
 
     from .conftest import StubBank, StubLLM
 
-    monkeypatch.delenv("BASTION_URL", raising=False)
-    monkeypatch.delenv("BASTION_KEY", raising=False)
+    monkeypatch.delenv("GARRISON_URL", raising=False)
+    monkeypatch.delenv("GARRISON_KEY", raising=False)
     monkeypatch.setenv("IRONCLAD_BASE_URL", "http://bank-service:8001/")
     llm = StubLLM({"Balances?": [{"tool": "get_accounts", "args": {}}, {"text": "You have $2,400."}]})
     bank = StubBank()
@@ -133,9 +133,9 @@ def test_ironclad_base_url_is_ignored_in_remote_mode_with_a_warning(monkeypatch,
     import app.main as main
 
     monkeypatch.setenv("IRONCLAD_BASE_URL", "http://bank-service:8001")
-    monkeypatch.setenv("BASTION_URL", "http://bastion.test")
-    monkeypatch.setenv("BASTION_KEY", KEY)
-    service = FakeBastion(CONFIG)
+    monkeypatch.setenv("GARRISON_URL", "http://garrison.test")
+    monkeypatch.setenv("GARRISON_KEY", KEY)
+    service = FakeGarrison(CONFIG)
     with caplog.at_level("WARNING"):
         platform = main.build_platform(service_transport=httpx.MockTransport(service), cache_dir=tmp_path,
                                        dashboard=False)

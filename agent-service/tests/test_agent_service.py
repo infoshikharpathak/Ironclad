@@ -1,4 +1,4 @@
-"""agent-service on bastion: sessions, governance, and the HTTP shapes
+"""agent-service on garrison: sessions, governance, and the HTTP shapes
 the web UI depends on."""
 
 import asyncio
@@ -71,7 +71,9 @@ async def test_transfer_without_lookups_is_blocked_with_correction(service):
     # the correction reached the model as the tool result
     (seen,) = llm.tool_results_seen(S1_SEND)
     assert seen["correction"]["violation"] == "missing_prerequisite"
-    assert seen["correction"]["required_actions"] == ["one of get_accounts / lookup_account"]
+    # alternatives are in required_any (anvil 57b31d6); required_actions is only tools that must all run
+    assert seen["correction"]["required_actions"] == []
+    assert sorted(seen["correction"]["required_any"]) == ["get_accounts", "lookup_account"]
 
 
 async def test_two_concurrent_sessions_share_nothing(service):
@@ -207,7 +209,7 @@ async def test_otp_never_reaches_the_agent_even_if_the_bank_leaks_it(service):
     assert "482913" not in _json.dumps(llm.requests)  # never in the model's context
     export = (await client.get("/traces/export", params={"session_id": "leak"})).text
     assert "482913" not in export
-    from bastion import LocalSink
+    from garrison import LocalSink
     assert "482913" not in _json.dumps(LocalSink().read())
 
 

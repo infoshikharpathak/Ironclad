@@ -11,8 +11,8 @@
    and no transfer is attempted.
 
 The trace viewer then shows the blocked tool result with the matched
-pattern: in the web app's trace panel, and on the bastion dashboard when the
-agent-service runs in remote mode (BASTION_URL / BASTION_KEY).
+pattern: in the web app's trace panel, and on the garrison dashboard when the
+agent-service runs in remote mode (GARRISON_URL / GARRISON_KEY).
 
 Needs the bank-service (:8001) and agent-service (:8002) running. Stdlib only:
 
@@ -99,7 +99,7 @@ def ask(agent: str) -> None:
         print("   No injection block in this session. The model may not have called get_transactions;"
               " run --ask-only again.")
     print(f"\n   Trace panel: open the web app's agent chat. Session id: {session}")
-    print("   bastion dashboard (remote mode): /ui/apps/ironclad/traces?status=blocked")
+    print("   garrison dashboard (remote mode): /ui/apps/ironclad/traces?status=blocked")
 
 
 def main() -> int:
